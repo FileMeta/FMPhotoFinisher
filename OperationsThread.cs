@@ -10,14 +10,91 @@ namespace FMPhotoFinisher
 {
     class OperationsThread
     {
+// Column 78                                                                 |
         const string c_Syntax =
-@"Command-Line Syntax:
-   FMPhotoFinisher [command]...
-Commands:
-  -h      Print this help text. 
-";
+@"
+FMPhotoFinisher processes photos, videos, and audio files normalizing
+metadata, rotating photos to vertical, transcoding video, and so forth. It
+facilitates collecting media from source devices like video cameras, smart
+phones and audio recorders.
 
-        static readonly string[] s_mediaExtensions = new string[] { ".jpg", ".mp4", ".avi", ".mpg", ".mov", ".wav", ".mp3", ".jpeg", ".mpeg" };
+Command-Line Syntax:
+  FMPhotoFinisher <source> [destination] <operations>
+
+Supported File Types:
+  Only files with the following extensions are supported. All others are
+  ignored:
+    .jpg .jpeg       JPEG Images
+    .mp4             MPEG 4 Video
+    .m4a             MPEG 4 Audio
+    .mp3             MP3 Audio    
+
+    Other video formats; must be transcoded to .mp4 format to gain metadata
+    support;
+    .avi .mov .mpg .mpeg
+
+    Other audio formats; must be transcoded to .m4a or .mp3 to gain metadata
+    support.
+    .wav
+
+Source:
+  The source selection parameters indicate the files to be processed.
+  Regardless of selection mode or wildcards, only files with the extensions
+  listed above will be processed; all others are ignored. Multiple selection
+  parameters may be included. If more than one selection happens to include
+  the same file, the file will only be processed once.
+
+  -s <path>        Select files from the specified path. If the path
+                   specifies a directory then all files in the directory are
+                   included (so long as they have a supported filename
+                   extension). The path may include wildcards.
+  
+  -st <path>       Select files in the specified subdirectory tree. This is
+                   similar to -s except that all files in subdirectories of
+                   the specified path are also included.
+
+  -sDCF            Select files from all removable DCF (Design rule for
+                   Camera File system) devices. This is the best option for
+                   retrieving from digital cameras or memory cards from
+                   cameras.
+
+Destination:
+  If no destination is specified, then the updates are made in-place.
+
+  -d <path>        A path to the folder where the processed files should be
+                   placed.
+
+  -sort            Auto-sort the transferred files into a directory tree
+                   rooted in the folder specified by -d. The tree hierarchy
+                   is year/month/day.
+
+  -move            Move the files from the source to the destination. If this
+                   parameter is not included then the unprocessed original
+                   files are left at the source.
+
+Operations:
+  -autorot         Using the 'orientation' metadata flag, auto rotate images
+                   to their vertical position and clear the orientation flag.
+
+  -datevideo       Set the ""Media Created"" date on video files from the
+
+Other Options:
+
+  -h               Print this help text and exit (ignoring all other
+                   commands).
+
+  -log <filename>  Log all operations to the specified file. If the file
+                   exists then the new operations will be appended to the end
+                   of the file.
+";
+// Column 78                                                                 |
+
+        static readonly string[] s_mediaExtensions = new string[]
+        {
+            ".jpg", ".mp4", ".m4a", ".mp3", ".avi", ".mpg", ".mov", ".wav", ".jpeg", ".mpeg"
+        };
+
+        static readonly HashSet<string> s_mediaExtensionHash = new HashSet<string>(s_mediaExtensions);
 
         int m_started;  // Actually used as a bool but Interlocked works better with an int.
         Thread m_thread;
@@ -25,6 +102,10 @@ Commands:
 
         // Command-line operations
         bool m_showSyntax;
+        bool m_commandLineError;
+        List<ProcessFileInfo> m_selectedFiles = new List<ProcessFileInfo>();
+        HashSet<string> m_selectedFilesHash = new HashSet<string>();
+        bool m_bAutoRotate;
 
         public OperationsThread(MainWindow mainWindow)
         {
@@ -38,6 +119,31 @@ Commands:
             if (started == 0)
             {
                 m_thread.Start();
+            }
+        }
+
+        private void ThreadMain()
+        {
+            GC.KeepAlive(this); // Paranoid - probably not necessary as the thread has a reference to this and the system has a reference to the thread.
+
+            try
+            {
+                ParseCommandLine();
+                if (m_commandLineError) return;
+                if (m_showSyntax)
+                {
+                    m_mainWindow.WriteLine(c_Syntax);
+                    return;
+                }
+
+                foreach(var fi in m_selectedFiles)
+                {
+                    m_mainWindow.WriteLine(fi.Filename);
+                }
+            }
+            catch (Exception err)
+            {
+                m_mainWindow.WriteLine(err.ToString());
             }
         }
 
@@ -58,6 +164,11 @@ Commands:
                         m_showSyntax = true;
                         break;
 
+                    case "-s":
+                        ++i;
+                        SelectFiles(args[i], false);
+                        break;
+
                     default:
                         m_mainWindow.WriteLine($"Command-line syntax error: '{args[i]}' is not a recognized command.");
                         m_mainWindow.WriteLine();
@@ -68,17 +179,102 @@ Commands:
 
         }
 
-        private void ThreadMain()
+        private void SelectFiles(string path, bool recursive)
         {
-            GC.KeepAlive(this); // Paranoid - probably not necessary as the thread has a reference to this and the system has a reference to the thread.
-
-            ParseCommandLine();
-            if (m_showSyntax)
+            try
             {
-                m_mainWindow.WriteLine(c_Syntax);
-                return;
+                string directory;
+                string pattern;
+
+                // If has wildcards, separate the parts
+                if (HasWildcard(path))
+                {
+                    directory = Path.GetDirectoryName(path);
+                    pattern = Path.GetFileName(path);
+                    if (HasWildcard(directory))
+                    {
+                        m_mainWindow.WriteLine($"Source '{path}' is invalid. Wildcards not allowed in directory name.");
+                        m_commandLineError = true;
+                        return;
+                    }
+                    if (string.IsNullOrEmpty(directory))
+                    {
+                        directory = Environment.CurrentDirectory;
+                    }
+                }
+
+                else if (Directory.Exists(path))
+                {
+                    directory = path;
+                    pattern = "*";
+                }
+
+                else
+                {
+                    directory = Path.GetDirectoryName(path);
+                    pattern = Path.GetFileName(path);
+                    if (string.IsNullOrEmpty(directory))
+                    {
+                        directory = Environment.CurrentDirectory;
+                    }
+                    if (!Directory.Exists(directory))
+                    {
+                        m_mainWindow.WriteLine($"Source '{path}' does not exist.");
+                        m_commandLineError = true;
+                        return;
+                    }
+                }
+
+                int count = 0;
+                int dupCount = 0;
+                DirectoryInfo di = new DirectoryInfo(directory);
+                foreach(var fi in di.EnumerateFiles(pattern, recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly))
+                {
+                    if (s_mediaExtensionHash.Contains(fi.Extension.ToLower()))
+                    {
+                        if (m_selectedFilesHash.Add(fi.FullName.ToLower()))
+                        {
+                            m_selectedFiles.Add(new ProcessFileInfo(fi.FullName, fi.Length));
+                            m_selectedFilesHash.Add(fi.FullName.ToLower());
+                            ++count;
+                        }
+                        else
+                        {
+                            ++dupCount;
+                        }
+                    }
+                }
+
+                if (count == 0)
+                {
+                    if (dupCount == 0)
+                    {
+                        m_mainWindow.WriteLine($"No media files found at source '{path}'.");
+                        m_commandLineError = true;
+                    }
+                    else
+                    {
+                        m_mainWindow.WriteLine($"All media files found at source '{path}' are duplicates.");
+                    }
+                }
+            }
+            catch (Exception err)
+            {
+                m_mainWindow.WriteLine($"Source '{path}' not found. ({err.Message})");
+                m_commandLineError = true;
             }
 
+        }
+
+        private static char[] s_wildcards = new char[] { '*', '?' };
+
+        private static bool HasWildcard(string filename)
+        {
+            return filename.IndexOfAny(s_wildcards) >= 0;
+        }
+
+        private void OldCode()
+        {
             /*
             m_mainWindow.OutputWrite("Operations complete. Exiting in 5 seconds.");
             Thread.Sleep(5000);

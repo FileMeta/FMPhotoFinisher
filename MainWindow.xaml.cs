@@ -29,6 +29,8 @@ namespace FMPhotoFinisher
             InitializeComponent();
         }
 
+        // TODO: Change TextBlock to FlowDocumentScrollViewer
+
         /// <summary>
         /// Write to the output control. Thread safe.
         /// </summary>
@@ -64,7 +66,7 @@ namespace FMPhotoFinisher
 
         private void OutputWriteInternal(string text)
         {
-            m_BodyText.Inlines.Add(new Run(text));
+            m_BodyDoc.ContentEnd.InsertTextInRun(text);
         }
 
         IntPtr m_hwnd = IntPtr.Zero;

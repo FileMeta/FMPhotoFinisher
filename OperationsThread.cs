@@ -116,7 +116,11 @@ Other Options:
         bool m_commandLineError;
         List<ProcessFileInfo> m_selectedFiles = new List<ProcessFileInfo>();
         HashSet<string> m_selectedFilesHash = new HashSet<string>();
+        long m_selectedFilesSize;
         bool m_bAutoRotate;
+        string m_dstDirectory;
+        bool m_sort;
+        bool m_move;
 
         public OperationsThread(MainWindow mainWindow)
         {
@@ -147,13 +151,15 @@ Other Options:
                     return;
                 }
 
-                int n = 0;
-                foreach(var fi in m_selectedFiles)
+                // Move or copy the files if a destination directory is specified
+                if (m_dstDirectory != null)
                 {
-                    m_mainWindow.WriteLine(fi.Filename);
-                    m_mainWindow.SetProgress($"{n} of {m_selectedFiles.Count}");
-                    ++n;
+                    CopyFiles();
                 }
+
+                m_mainWindow.WriteLine();
+                m_mainWindow.WriteLine("All operations complete!");
+                m_mainWindow.SetProgress(string.Empty);
             }
             catch (Exception err)
             {
@@ -183,6 +189,28 @@ Other Options:
                         SelectFiles(args[i], false);
                         break;
 
+                    case "-d":
+                        ++i;
+                        {
+                            string dst = args[i];
+                            if (!Directory.Exists(dst))
+                            {
+                                m_mainWindow.WriteLine($"Command-line syntax error: Destination folder '{dst}' does not exist.");
+                                m_commandLineError = true;
+                                break;
+                            }
+                            m_dstDirectory = Path.GetFullPath(dst);
+                        }
+                        break;
+
+                    case "-sort":
+                        m_sort = true;
+                        break;
+
+                    case "-move":
+                        m_move = true;
+                        break;
+
                     default:
                         m_mainWindow.WriteLine($"Command-line syntax error: '{args[i]}' is not a recognized command.");
                         m_mainWindow.WriteLine();
@@ -191,6 +219,7 @@ Other Options:
                 }
             }
 
+            m_selectedFilesHash = null; // No longer needed once selection is complete
         }
 
         private void SelectFiles(string path, bool recursive)
@@ -250,6 +279,7 @@ Other Options:
                         {
                             m_selectedFiles.Add(new ProcessFileInfo(fi.FullName, fi.Length));
                             m_selectedFilesHash.Add(fi.FullName.ToLower());
+                            m_selectedFilesSize += fi.Length;
                             ++count;
                         }
                         else
@@ -280,11 +310,76 @@ Other Options:
 
         }
 
+        private void CopyFiles()
+        {
+            string verb = m_move ? "Moving" : "Copying";
+            string dstDirectory = m_dstDirectory;
+            // TODO: If -sort then add a temporary directory.
+
+            m_mainWindow.WriteLine($"{verb} media files to working folder.");
+
+            uint startTicks = (uint)Environment.TickCount;
+            long bytesCopied = 0;
+
+            int n = 0;
+            foreach (var fi in m_selectedFiles)
+            {
+                if (bytesCopied == 0)
+                {
+                    m_mainWindow.SetProgress($"{verb} file {n + 1} of {m_selectedFiles.Count}");
+                }
+                else
+                {
+                    uint ticksElapsed;
+                    unchecked
+                    {
+                        ticksElapsed = (uint)Environment.TickCount - startTicks;
+                    }
+
+                    double bps = ((double)bytesCopied * 1000.0) / (double)ticksElapsed;
+                    double remaining = (m_selectedFilesSize - bytesCopied) / bps;
+                    TimeSpan remain = new TimeSpan(((long)((m_selectedFilesSize - bytesCopied) / bps)) * 10000000L);
+
+                    m_mainWindow.SetProgress($"{verb} file {n + 1} of {m_selectedFiles.Count}. {remain:g} remaining. {(bps/(1024*1024)):#,###.###} MBps.");
+                }
+
+                string dstFilepath = Path.Combine(m_dstDirectory, fi.OriginalFilename);
+                MakeFilepathUnique(ref dstFilepath);
+
+                if (m_move)
+                {
+                    File.Move(fi.Filepath, dstFilepath);
+                }
+                else
+                {
+                    File.Copy(fi.Filepath, dstFilepath);
+                }
+                fi.Filepath = dstFilepath;
+                bytesCopied += fi.Size;
+
+                ++n;
+            }
+        }
+
         private static char[] s_wildcards = new char[] { '*', '?' };
 
         private static bool HasWildcard(string filename)
         {
             return filename.IndexOfAny(s_wildcards) >= 0;
+        }
+
+        static void MakeFilepathUnique(ref string dstFilepath)
+        {
+            if (!File.Exists(dstFilepath)) return;
+
+            string basepath = Path.Combine(Path.GetDirectoryName(dstFilepath), Path.GetFileNameWithoutExtension(dstFilepath));
+            string extension = Path.GetExtension(dstFilepath);
+            int i = 1;
+            do
+            {
+                dstFilepath = $"{basepath}({i}){extension}";
+                ++i;
+            } while (File.Exists(dstFilepath));
         }
 
         private void OldCode()

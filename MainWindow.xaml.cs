@@ -58,7 +58,6 @@ namespace FMPhotoFinisher
             OutputWrite("\r\n");
         }
 
-
         public void OutputWrite(string format, params object[] args)
         {
             OutputWrite(string.Format(format, args));
@@ -67,6 +66,23 @@ namespace FMPhotoFinisher
         private void OutputWriteInternal(string text)
         {
             m_BodyDoc.ContentEnd.InsertTextInRun(text);
+        }
+
+        public void SetProgress(string text)
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new StringDelegate(SetProgressInternal), text);
+            }
+            else
+            {
+                OutputWriteInternal(text);
+            }
+        }
+
+        private void SetProgressInternal(string text)
+        {
+            m_Progress.Text = text;
         }
 
         IntPtr m_hwnd = IntPtr.Zero;

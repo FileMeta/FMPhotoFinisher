@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="FileMeta Collect from Camera" Height="225" Width="451" Loaded="Window_Loaded">
     <DockPanel>
+        <TextBox Name="m_Progress" DockPanel.Dock="Top"/>
         <FlowDocumentScrollViewer ScrollViewer.VerticalScrollBarVisibility="Auto">
             <FlowDocument Name="m_BodyDoc" FontFamily="Calibri" TextAlignment="Left"/>
         </FlowDocumentScrollViewer>

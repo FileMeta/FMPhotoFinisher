@@ -6,6 +6,17 @@ using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 
+//Next Steps
+/* Parse -d parameter
+ * Copy files according to -d and update the files in the queue
+ *   Ensure that files with the same name are handled properly (add a numeric suffix)
+ * Process the queue
+ *   Retrieve metadata
+ *   Rotate images
+ *   Update metadata
+ *   Note: Use a prefix character on keywords that are extended metadata (e.g. *, &, :, !, ?)
+ */
+
 namespace FMPhotoFinisher
 {
     class OperationsThread
@@ -136,9 +147,12 @@ Other Options:
                     return;
                 }
 
+                int n = 0;
                 foreach(var fi in m_selectedFiles)
                 {
                     m_mainWindow.WriteLine(fi.Filename);
+                    m_mainWindow.SetProgress($"{n} of {m_selectedFiles.Count}");
+                    ++n;
                 }
             }
             catch (Exception err)

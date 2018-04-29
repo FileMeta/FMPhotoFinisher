@@ -117,7 +117,7 @@ Other Options:
         List<ProcessFileInfo> m_selectedFiles = new List<ProcessFileInfo>();
         HashSet<string> m_selectedFilesHash = new HashSet<string>();
         long m_selectedFilesSize;
-        bool m_bAutoRotate;
+        bool m_autoRotate;
         string m_dstDirectory;
         bool m_sort;
         bool m_move;
@@ -157,6 +157,8 @@ Other Options:
                     CopyFiles();
                 }
 
+                ProcessMediaFiles();
+
                 m_mainWindow.WriteLine();
                 m_mainWindow.WriteLine("All operations complete!");
                 m_mainWindow.SetProgress(string.Empty);
@@ -164,6 +166,42 @@ Other Options:
             catch (Exception err)
             {
                 m_mainWindow.WriteLine(err.ToString());
+            }
+        }
+
+        void ProcessMediaFiles()
+        {
+            // We index through the files because we may need the index to match metadata
+            // on a preceding or succeeding file
+            int count = m_selectedFiles.Count;
+            for (int i=0; i<count; ++i)
+            {
+                var fi = m_selectedFiles[i];
+                ProcessMediaFile(fi, i);
+            }
+        }
+
+        void ProcessMediaFile(ProcessFileInfo fi, int index)
+        {
+            bool ann = false;
+
+            using (var mdf = new MediaFile(fi.Filepath))
+            {
+                if (m_autoRotate && mdf.Orientation != 1)
+                {
+                    AnnounceFile(fi, ref ann);
+                    m_mainWindow.WriteLine("   Autorotate");
+                    mdf.RotateToVertical();
+                }
+            }
+        }
+
+        void AnnounceFile(ProcessFileInfo fi, ref bool announced)
+        {
+            if (!announced)
+            {
+                m_mainWindow.WriteLine(fi.Filepath);
+                announced = true;
             }
         }
 
@@ -209,6 +247,10 @@ Other Options:
 
                     case "-move":
                         m_move = true;
+                        break;
+
+                    case "-autorot":
+                        m_autoRotate = true;
                         break;
 
                     default:
@@ -277,7 +319,7 @@ Other Options:
                     {
                         if (m_selectedFilesHash.Add(fi.FullName.ToLower()))
                         {
-                            m_selectedFiles.Add(new ProcessFileInfo(fi.FullName, fi.Length));
+                            m_selectedFiles.Add(new ProcessFileInfo(fi));
                             m_selectedFilesHash.Add(fi.FullName.ToLower());
                             m_selectedFilesSize += fi.Length;
                             ++count;
@@ -340,10 +382,10 @@ Other Options:
                     double remaining = (m_selectedFilesSize - bytesCopied) / bps;
                     TimeSpan remain = new TimeSpan(((long)((m_selectedFilesSize - bytesCopied) / bps)) * 10000000L);
 
-                    m_mainWindow.SetProgress($"{verb} file {n + 1} of {m_selectedFiles.Count}. {remain:g} remaining. {(bps/(1024*1024)):#,###.###} MBps.");
+                    m_mainWindow.SetProgress($"{verb} file {n + 1} of {m_selectedFiles.Count}. Time remaining: {remain.FmtRemain()} MBps: {(bps/(1024*1024)):#,###.###}");
                 }
 
-                string dstFilepath = Path.Combine(m_dstDirectory, fi.OriginalFilename);
+                string dstFilepath = Path.Combine(m_dstDirectory, Path.GetFileName(fi.OriginalFilepath));
                 MakeFilepathUnique(ref dstFilepath);
 
                 if (m_move)
@@ -368,7 +410,7 @@ Other Options:
             return filename.IndexOfAny(s_wildcards) >= 0;
         }
 
-        static void MakeFilepathUnique(ref string dstFilepath)
+        private static void MakeFilepathUnique(ref string dstFilepath)
         {
             if (!File.Exists(dstFilepath)) return;
 
@@ -520,4 +562,25 @@ Other Options:
         } // Function ThreadMain
 
     } // class OperationsThread
+
+    static class FormatExtensions
+    {
+        public static string FmtRemain(this TimeSpan ts)
+        {
+            var sb = new StringBuilder();
+            int hours = (int)ts.TotalHours;
+            if (hours > 0)
+            {
+                sb.Append(hours.ToString());
+                sb.Append(':');
+            }
+            if (hours > 0 || ts.Minutes > 0)
+            {
+                sb.Append(ts.Minutes.ToString("d2"));
+                sb.Append(':');
+            }
+            sb.Append(ts.Seconds.ToString("d2"));
+            return sb.ToString();
+        }
+    }
 }

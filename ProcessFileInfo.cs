@@ -9,15 +9,20 @@ namespace FMPhotoFinisher
 {
     class ProcessFileInfo
     {
-        public ProcessFileInfo(string filepath, long size)
+        public ProcessFileInfo(FileInfo fi)
         {
-            Filepath = filepath;
-            Size = size;
-            OriginalFilename = Path.GetFileName(filepath);
+            Filepath = fi.FullName;
+            Size = fi.Length;
+            OriginalFilepath = fi.FullName;
+            OriginalDateCreated = fi.CreationTimeUtc;
+            OriginalDateModified = fi.LastWriteTimeUtc;
+
         }
 
         public string Filepath { get; set; }
         public long Size { get; private set; }
-        public string OriginalFilename { get; private set; }
+        public string OriginalFilepath { get; private set; }
+        public DateTime OriginalDateCreated { get; private set; }
+        public DateTime OriginalDateModified { get; private set; }
     }
 }

@@ -66,6 +66,7 @@ namespace FMPhotoFinisher
         private void OutputWriteInternal(string text)
         {
             m_BodyDoc.ContentEnd.InsertTextInRun(text);
+            ScrollToBottom();
         }
 
         public void SetProgress(string text)
@@ -116,5 +117,34 @@ namespace FMPhotoFinisher
             var thread = new OperationsThread(this);
             thread.Start();
         }
+
+        ScrollViewer m_bodyDocScrollViewer = null;
+
+        private void ScrollToBottom()
+        {
+            if (m_bodyDocScrollViewer == null)
+            {
+                DependencyObject obj = m_BodyViewer;
+
+                do
+                {
+                    if (VisualTreeHelper.GetChildrenCount(obj) > 0)
+                    {
+                        obj = VisualTreeHelper.GetChild(obj as Visual, 0);
+                        m_bodyDocScrollViewer = obj as ScrollViewer;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                while (m_bodyDocScrollViewer == null);
+            }
+            if (m_bodyDocScrollViewer != null)
+            {
+                m_bodyDocScrollViewer.ScrollToBottom();
+            }
+        }
+
     }
 }

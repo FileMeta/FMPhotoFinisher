@@ -87,7 +87,18 @@ Operations:
   -autorot         Using the 'orientation' metadata flag, auto rotate images
                    to their vertical position and clear the orientation flag.
 
-  -datevideo       Set the ""Media Created"" date on video files from the
+  -transcode       Transcode video and audio files to the preferred format
+                   which is .mp4 for video and .m4a for audio. Also renames
+                   .jpeg files to .jpg.
+
+  -datefixup       If the ""Date Taken"" field (JPEG images) or ""Media Created""
+                   field (MP4 and M4A video and audio files) is missing, fill
+                   it in with the best available information including the
+                   date created, date modifed, and dates from neighboring
+                   files in the selection. In particular, this is effective
+                   for filling in the date for video files when cameras don't
+                   supply that information. Also fills in timezone tag if it
+                   is not present.
 
 Other Options:
 
@@ -99,13 +110,6 @@ Other Options:
                    of the file.
 ";
 // Column 78                                                                 |
-
-        static readonly string[] s_mediaExtensions = new string[]
-        {
-            ".jpg", ".mp4", ".m4a", ".mp3", ".avi", ".mpg", ".mov", ".wav", ".jpeg", ".mpeg"
-        };
-
-        static readonly HashSet<string> s_mediaExtensionHash = new HashSet<string>(s_mediaExtensions);
 
         int m_started;  // Actually used as a bool but Interlocked works better with an int.
         Thread m_thread;
@@ -121,6 +125,8 @@ Other Options:
         string m_dstDirectory;
         bool m_sort;
         bool m_move;
+        bool m_transcode;
+        bool m_dateFixup;
 
         public OperationsThread(MainWindow mainWindow)
         {
@@ -193,6 +199,20 @@ Other Options:
                     m_mainWindow.WriteLine("   Autorotate");
                     mdf.RotateToVertical();
                 }
+
+                if (m_transcode && !mdf.IsPreferredFormat)
+                {
+                    AnnounceFile(fi, ref ann);
+                    m_mainWindow.WriteLine($"   Transcode to {mdf.PreferredFormat}");
+                    mdf.TranscodeToPreferredFormat();
+                }
+
+                if (m_dateFixup)
+                {
+                    // Fill in date taken if not present
+                    // Fill in timezone if not present
+
+                }
             }
         }
 
@@ -249,8 +269,16 @@ Other Options:
                         m_move = true;
                         break;
 
+                    case "-transcode":
+                        m_transcode = true;
+                        break;
+
                     case "-autorot":
                         m_autoRotate = true;
+                        break;
+
+                    case "-datefixup":
+                        m_dateFixup = true;
                         break;
 
                     default:
@@ -315,12 +343,11 @@ Other Options:
                 DirectoryInfo di = new DirectoryInfo(directory);
                 foreach(var fi in di.EnumerateFiles(pattern, recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly))
                 {
-                    if (s_mediaExtensionHash.Contains(fi.Extension.ToLower()))
+                    if (MediaFile.IsSupportedMediaType(fi.Extension))
                     {
-                        if (m_selectedFilesHash.Add(fi.FullName.ToLower()))
+                        if (m_selectedFilesHash.Add(fi.FullName.ToLowerInvariant()))
                         {
                             m_selectedFiles.Add(new ProcessFileInfo(fi));
-                            m_selectedFilesHash.Add(fi.FullName.ToLower());
                             m_selectedFilesSize += fi.Length;
                             ++count;
                         }
@@ -386,7 +413,7 @@ Other Options:
                 }
 
                 string dstFilepath = Path.Combine(m_dstDirectory, Path.GetFileName(fi.OriginalFilepath));
-                MakeFilepathUnique(ref dstFilepath);
+                MediaFile.MakeFilepathUnique(ref dstFilepath);
 
                 if (m_move)
                 {
@@ -408,20 +435,6 @@ Other Options:
         private static bool HasWildcard(string filename)
         {
             return filename.IndexOfAny(s_wildcards) >= 0;
-        }
-
-        private static void MakeFilepathUnique(ref string dstFilepath)
-        {
-            if (!File.Exists(dstFilepath)) return;
-
-            string basepath = Path.Combine(Path.GetDirectoryName(dstFilepath), Path.GetFileNameWithoutExtension(dstFilepath));
-            string extension = Path.GetExtension(dstFilepath);
-            int i = 1;
-            do
-            {
-                dstFilepath = $"{basepath}({i}){extension}";
-                ++i;
-            } while (File.Exists(dstFilepath));
         }
 
         private void OldCode()

@@ -55,6 +55,7 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="IsomCoreMetadata.cs" />
     <Compile Include="JpegRotator.cs" />
     <Compile Include="MediaFile.cs" />
     <Compile Include="ProcessFileInfo.cs" />

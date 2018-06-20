@@ -149,6 +149,11 @@ Other Options:
 
             try
             {
+                using (var exifTool = new ExifToolWrapper.ExifTool())
+                {
+                    exifTool.Test();
+                }
+
                 ParseCommandLine();
                 if (m_commandLineError) return;
                 if (m_showSyntax)

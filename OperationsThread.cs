@@ -151,7 +151,12 @@ Other Options:
             {
                 using (var exifTool = new ExifToolWrapper.ExifTool())
                 {
-                    exifTool.Test();
+                    var dict = new Dictionary<string, string>();
+                    exifTool.GetProperties("F:\\SampleData\\PhotoSource\\IMG_4732.jpg", dict);
+                    foreach (var pair in dict)
+                    {
+                        m_mainWindow.WriteLine($"{pair.Key}={pair.Value}");
+                    }
                 }
 
                 ParseCommandLine();

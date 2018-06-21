@@ -29,7 +29,7 @@ namespace ExifToolWrapper
             // Prepare process start
             var psi = new ProcessStartInfo(c_exeName, c_arguments);
             psi.UseShellExecute = false;
-            psi.CreateNoWindow = false; //true;
+            psi.CreateNoWindow = true;
             psi.RedirectStandardInput = true;
             psi.RedirectStandardOutput = true;
             psi.StandardOutputEncoding = s_Utf8NoBOM;
@@ -46,19 +46,32 @@ namespace ExifToolWrapper
             m_out = m_exifTool.StandardOutput;
         }
 
-        public void Test()
+        public void GetProperties(string filename, ICollection<KeyValuePair<string, string> > propsRead)
         {
-            m_in.Write("F:\\SampleData\\PhotoSource\\IMG_4732.jpg\n-execute\n");
+            m_in.Write(filename);
+            m_in.Write("\n-execute\n");
             m_in.Flush();
-            Debug.WriteLine("Output:");
+#if TRACE
+            Debug.WriteLine(filename);
+            Debug.WriteLine("-execute");
+#endif
             for (; ; )
             {
-                string line = m_exifTool.StandardOutput.ReadLine();
-                if (line.StartsWith("{ready"))
-                {
-                    break;
-                }
+                var line = m_out.ReadLine();
+#if TRACE
                 Debug.WriteLine(line);
+#endif
+                if (line.StartsWith("{ready")) break;
+                if (line[0] == '-')
+                {
+                    int eq = line.IndexOf('=');
+                    if (eq > 1)
+                    {
+                        string key = line.Substring(1, eq - 1);
+                        string value = line.Substring(eq + 1).Trim();
+                        propsRead.Add(new KeyValuePair<string, string>(key, value));                      
+                    }
+                }
             }
         }
 

@@ -7,14 +7,19 @@ using System.Text;
 using System.Threading.Tasks;
 
 //Next Steps
-/* Parse -d parameter
- * Copy files according to -d and update the files in the queue
- *   Ensure that files with the same name are handled properly (add a numeric suffix)
- * Process the queue
+/* Done:
+ *  -d
+ *  -autorot
+ * Next:
+ *  -log
+ *  -transcode
+ *  -datefixup
+ * 
+ * Framework: Process the queue
  *   Retrieve metadata
  *   Rotate images
+ *   Transcode
  *   Update metadata
- *   Note: Use a prefix character on keywords that are extended metadata (e.g. *, &, :, !, ?)
  */
 
 namespace FMPhotoFinisher
@@ -149,16 +154,6 @@ Other Options:
 
             try
             {
-                using (var exifTool = new ExifToolWrapper.ExifTool())
-                {
-                    var dict = new Dictionary<string, string>();
-                    exifTool.GetProperties("F:\\SampleData\\PhotoSource\\IMG_4732.jpg", dict);
-                    foreach (var pair in dict)
-                    {
-                        m_mainWindow.WriteLine($"{pair.Key}={pair.Value}");
-                    }
-                }
-
                 ParseCommandLine();
                 if (m_commandLineError) return;
                 if (m_showSyntax)
@@ -230,7 +225,7 @@ Other Options:
         {
             if (!announced)
             {
-                m_mainWindow.WriteLine(fi.Filepath);
+                m_mainWindow.WriteLine(Path.GetFileName(fi.Filepath));
                 announced = true;
             }
         }
@@ -395,7 +390,7 @@ Other Options:
             string dstDirectory = m_dstDirectory;
             // TODO: If -sort then add a temporary directory.
 
-            m_mainWindow.WriteLine($"{verb} media files to working folder.");
+            m_mainWindow.WriteLine($"{verb} media files to working folder: {dstDirectory}.");
 
             uint startTicks = (uint)Environment.TickCount;
             long bytesCopied = 0;
@@ -419,7 +414,7 @@ Other Options:
                     double remaining = (m_selectedFilesSize - bytesCopied) / bps;
                     TimeSpan remain = new TimeSpan(((long)((m_selectedFilesSize - bytesCopied) / bps)) * 10000000L);
 
-                    m_mainWindow.SetProgress($"{verb} file {n + 1} of {m_selectedFiles.Count}. Time remaining: {remain.FmtRemain()} MBps: {(bps/(1024*1024)):#,###.###}");
+                    m_mainWindow.SetProgress($"{verb} file {n + 1} of {m_selectedFiles.Count}. Time remaining: {remain.FmtCustom()} MBps: {(bps/(1024*1024)):#,###.###}");
                 }
 
                 string dstFilepath = Path.Combine(m_dstDirectory, Path.GetFileName(fi.OriginalFilepath));
@@ -438,6 +433,15 @@ Other Options:
 
                 ++n;
             }
+
+            TimeSpan elapsed;
+            unchecked
+            {
+                uint ticksElapsed = (uint)Environment.TickCount - startTicks;
+                elapsed = new TimeSpan(ticksElapsed * 10000L);
+            }
+
+            m_mainWindow.WriteLine($"{verb} complete. {m_selectedFiles.Count} files, {bytesCopied / (1024.0 * 1024.0): #,##0.0} MB, {elapsed.FmtCustom()} elapsed");
         }
 
         private static char[] s_wildcards = new char[] { '*', '?' };
@@ -588,7 +592,7 @@ Other Options:
 
     static class FormatExtensions
     {
-        public static string FmtRemain(this TimeSpan ts)
+        public static string FmtCustom(this TimeSpan ts)
         {
             var sb = new StringBuilder();
             int hours = (int)ts.TotalHours;
@@ -597,11 +601,8 @@ Other Options:
                 sb.Append(hours.ToString());
                 sb.Append(':');
             }
-            if (hours > 0 || ts.Minutes > 0)
-            {
-                sb.Append(ts.Minutes.ToString("d2"));
-                sb.Append(':');
-            }
+            sb.Append(ts.Minutes.ToString("d2"));
+            sb.Append(':');
             sb.Append(ts.Seconds.ToString("d2"));
             return sb.ToString();
         }

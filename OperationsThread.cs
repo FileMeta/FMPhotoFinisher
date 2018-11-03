@@ -14,6 +14,7 @@ using System.Threading.Tasks;
  *  -log
  *  -transcode
  *  -datefixup
+ *  -sort
  * 
  * Framework: Process the queue
  *   Retrieve metadata
@@ -209,7 +210,16 @@ Other Options:
                 {
                     AnnounceFile(fi, ref ann);
                     m_mainWindow.WriteLine($"   Transcode to {mdf.PreferredFormat}");
-                    mdf.TranscodeToPreferredFormat();
+                    if (mdf.TranscodeToPreferredFormat(m_mainWindow.SetProgress))
+                    {
+                        fi.Filepath = mdf.Filepath;
+                        m_mainWindow.WriteLine($"      Transcoded to: {Path.GetFileName(mdf.Filepath)}");
+                    }
+                    else
+                    {
+                        m_mainWindow.WriteLine("      Transcode failed; original format retained.");
+                    }
+                    m_mainWindow.SetProgress(null);
                 }
 
                 if (m_dateFixup)
@@ -441,6 +451,7 @@ Other Options:
                 elapsed = new TimeSpan(ticksElapsed * 10000L);
             }
 
+            m_mainWindow.SetProgress(null);
             m_mainWindow.WriteLine($"{verb} complete. {m_selectedFiles.Count} files, {bytesCopied / (1024.0 * 1024.0): #,##0.0} MB, {elapsed.FmtCustom()} elapsed");
         }
 

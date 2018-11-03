@@ -83,7 +83,7 @@ namespace FMPhotoFinisher
 
         private void SetProgressInternal(string text)
         {
-            m_Progress.Text = text;
+            m_Progress.Text = text??string.Empty;
         }
 
         IntPtr m_hwnd = IntPtr.Zero;

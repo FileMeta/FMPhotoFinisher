@@ -2,9 +2,8 @@
 using WinShell;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
+using System.Diagnostics;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace FMPhotoFinisher
 {
@@ -22,6 +21,8 @@ namespace FMPhotoFinisher
     class MediaFile : IDisposable
     {
         #region Static Members
+
+        static Encoding s_Utf8NoBOM = new UTF8Encoding(false);
 
         static Dictionary<string, MediaType> s_mediaExtensions = new Dictionary<string, MediaType>()
         {
@@ -104,6 +105,12 @@ namespace FMPhotoFinisher
 
         #endregion
 
+        #region Delegates
+
+        public delegate void ProgressReporter(string progress);
+
+        #endregion
+
 
         string m_filepath;
         string m_ext;
@@ -115,6 +122,7 @@ namespace FMPhotoFinisher
         // Values from the ISOM container (.MOV, .MP4, and .M4A formats)
         DateTime? m_IsomCreationTime = null;
         DateTime? m_IsomModificationTime = null;
+        TimeSpan? m_isomDuration = null;
 
         public MediaFile(string filepath)
         {
@@ -148,13 +156,20 @@ namespace FMPhotoFinisher
             // Load Isom Properties
             if (s_isomExtensions.Contains(m_ext))
             {
-                using (var isom = new FileMeta.IsomCoreMetadata(filepath))
+                var isom = FileMeta.IsomCoreMetadata.TryOpen(filepath);
+                if (isom != null)
                 {
-                    m_IsomCreationTime = isom.CreationTime;
-                    m_IsomModificationTime = isom.ModificationTime;
+                    using (isom)
+                    {
+                        m_IsomCreationTime = isom.CreationTime;
+                        m_IsomModificationTime = isom.ModificationTime;
+                        m_isomDuration = isom.Duration;
+                    }
                 }
             }
         }
+
+        public string Filepath { get { return m_filepath; } }
 
         public MediaType MediaType { get { return m_mediaType; } }
 
@@ -170,28 +185,27 @@ namespace FMPhotoFinisher
 
         public bool IsPreferredFormat { get { return string.Equals(m_ext, PreferredFormat, StringComparison.Ordinal); } }
 
-        public void TranscodeToPreferredFormat()
+        public bool TranscodeToPreferredFormat(ProgressReporter reporter)
         {
             switch (m_ext)
             {
                 case ".jpeg":
-                    ChangeExtensionTo(".jpg");
-                    break;
+                    return ChangeExtensionTo(".jpg");
 
                 case ".avi":
                 case ".mov":
                 case ".mpg":
                 case ".mpeg":
-                    TranscodeVideo();
-                    break;
+                    return TranscodeVideo(reporter);
 
                 case ".mp3":
                 case ".wav":
-                    TranscodeAudio();
-                    break;
+                    return TranscodeAudio();
                 
                 // For all others do nothing
             }
+
+            return true;
         }
 
         #region IDisposable Support
@@ -228,23 +242,110 @@ namespace FMPhotoFinisher
 
         #region Private Members
 
-        void ChangeExtensionTo(string newExt)
+        bool ChangeExtensionTo(string newExt)
         {
-            string newPath = Path.ChangeExtension(m_filepath, newExt);
+            bool result = true;
+            try
+            {
+                string newPath = Path.ChangeExtension(m_filepath, newExt);
+                MakeFilepathUnique(ref newPath);
+                File.Move(m_filepath, newPath);
+                m_filepath = newPath;
+                m_ext = newExt;
+            }
+            catch
+            {
+                result = false;
+            }
+            return result;
+        }
+
+        const string c_FFMpeg = "FFMpeg.exe";
+        const string c_mp4Extension = ".mp4";
+               
+        bool TranscodeVideo(ProgressReporter reporter)
+        {
+            string newPath = Path.ChangeExtension(m_filepath, c_mp4Extension);
             MakeFilepathUnique(ref newPath);
-            File.Move(m_filepath, newPath);
-            m_filepath = newPath;
-            m_ext = newExt;
+
+            Process transcoder = null;
+            bool result = false;
+            try
+            {
+                // Compose arguments
+                var arguments = $"-hide_banner -i {m_filepath} -pix_fmt yuv420p -c:v libx264 -profile:v main -level:v 3.1 -crf 18 -c:a aac -f mp4 {newPath}";
+
+                // Prepare process start
+                var psi = new ProcessStartInfo(c_FFMpeg, arguments);
+                psi.UseShellExecute = false;
+                psi.CreateNoWindow = true; // Set to false if you want to monitor
+                psi.RedirectStandardError = true;
+                psi.StandardErrorEncoding = s_Utf8NoBOM;
+
+                transcoder = Process.Start(psi);
+
+                for (; ; )
+                {
+                    var line = transcoder.StandardError.ReadLine();
+                    if (line == null) break;
+                    reporter?.Invoke("Transcoding: " + line);
+                }
+                transcoder.WaitForExit();
+
+                result = transcoder.ExitCode == 0;
+            }
+            finally
+            {
+                if (transcoder != null)
+                {
+                    transcoder.Dispose();
+                    transcoder = null;
+                }
+            }
+
+            if (result)
+            {
+                // Confirm the transcoding by reading out the duration and comparing with original (if available)
+                var isom = FileMeta.IsomCoreMetadata.TryOpen(newPath);
+                if (isom == null)
+                {
+                    result = false;
+                }
+                else
+                {
+                    // TODO: Compare against duration data from other sources than just isom.
+
+                    using (isom)
+                    {
+                        if (m_isomDuration != null)
+                        {
+                            if (Math.Abs(m_isomDuration.Value.Ticks - isom.Duration.Ticks) > (250L * 10000L)) // 1/4 second
+                            {
+                                result = false;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // If successful, replace original with transcoded. If failed, delete the transcoded version.
+            if (result)
+            {
+                File.Delete(m_filepath);
+                m_filepath = newPath;
+                m_ext = c_mp4Extension;
+            }
+            else
+            {
+                File.Delete(newPath);
+            }
+
+            return result;
         }
 
-        void TranscodeVideo()
+        bool TranscodeAudio()
         {
-
-        }
-
-        void TranscodeAudio()
-        {
-
+            return false;
         }
 
         #endregion // Private Members

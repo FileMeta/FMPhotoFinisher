@@ -10,9 +10,11 @@ using System.Threading.Tasks;
 /* Done:
  *  -d
  *  -autorot
+ *  -transcode video
+ *  -orderednames
  * Next:
+ *  -transcode audio
  *  -log
- *  -transcode
  *  -datefixup
  *  -sort
  * 
@@ -90,6 +92,11 @@ Destination:
                    files are left at the source.
 
 Operations:
+  -orderednames    Canon cameras prefix photos with ""IMG_"" and videos with
+                   ""MVI_"". This option renames videos to use the ""IMG_""
+                   prefix thereby having them show in order with the
+                   associated photos.
+
   -autorot         Using the 'orientation' metadata flag, auto rotate images
                    to their vertical position and clear the orientation flag.
 
@@ -115,7 +122,11 @@ Other Options:
                    exists then the new operations will be appended to the end
                    of the file.
 ";
-// Column 78                                                                 |
+        // Column 78                                                                 |
+
+        // Other camera brands may eventually make this a list of name mappings rather than just one
+        const string c_changeFromPrefix = "MVI_";
+        const string c_changeToPrefix = "IMG_";
 
         int m_started;  // Actually used as a bool but Interlocked works better with an int.
         Thread m_thread;
@@ -127,6 +138,7 @@ Other Options:
         List<ProcessFileInfo> m_selectedFiles = new List<ProcessFileInfo>();
         HashSet<string> m_selectedFilesHash = new HashSet<string>();
         long m_selectedFilesSize;
+        bool m_orderedNames;
         bool m_autoRotate;
         string m_dstDirectory;
         bool m_sort;
@@ -196,6 +208,29 @@ Other Options:
         void ProcessMediaFile(ProcessFileInfo fi, int index)
         {
             bool ann = false;
+
+            if (m_orderedNames)
+            {
+                if (Path.GetFileName(fi.Filepath).StartsWith(c_changeFromPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    AnnounceFile(fi, ref ann);
+
+                    // Use the original filepath as the starting point unless, for some reason, the prefix is different.
+                    string fn = Path.GetFileName(fi.OriginalFilepath);
+                    if (!fn.StartsWith(c_changeFromPrefix, StringComparison.OrdinalIgnoreCase)) // Paranoid code
+                        fn = Path.GetFileName(fi.Filepath);
+
+                    // Create the new path and make it unique
+                    string newPath = Path.Combine(Path.GetDirectoryName(fi.Filepath),
+                        string.Concat(c_changeToPrefix, fn.Substring(c_changeFromPrefix.Length)));
+                    MediaFile.MakeFilepathUnique(ref newPath);
+
+                    // Rename
+                    m_mainWindow.WriteLine("   Rename to: " + Path.GetFileName(newPath));
+                    File.Move(fi.Filepath, newPath);
+                    fi.Filepath = newPath;
+                }
+            }
 
             using (var mdf = new MediaFile(fi.Filepath))
             {
@@ -286,6 +321,10 @@ Other Options:
 
                     case "-transcode":
                         m_transcode = true;
+                        break;
+
+                    case "-orderednames":
+                        m_orderedNames = true;
                         break;
 
                     case "-autorot":

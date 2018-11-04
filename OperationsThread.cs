@@ -12,9 +12,10 @@ using System.Threading.Tasks;
  *  -autorot
  *  -transcode video
  *  -orderednames
- * Next:
  *  -transcode audio
+ * Next:
  *  -log
+ *  preserve metadata on transcode
  *  -datefixup
  *  -sort
  * 
@@ -125,7 +126,8 @@ Other Options:
         // Column 78                                                                 |
 
         // Other camera brands may eventually make this a list of name mappings rather than just one
-        const string c_changeFromPrefix = "MVI_";
+        const string c_changeFromPrefix1 = "MVI_";
+        const string c_changeFromPrefix2 = "SND_";
         const string c_changeToPrefix = "IMG_";
 
         int m_started;  // Actually used as a bool but Interlocked works better with an int.
@@ -211,18 +213,29 @@ Other Options:
 
             if (m_orderedNames)
             {
-                if (Path.GetFileName(fi.Filepath).StartsWith(c_changeFromPrefix, StringComparison.OrdinalIgnoreCase))
+                string fn = Path.GetFileName(fi.Filepath);
+                string changeFrom = null;
+                if (fn.StartsWith(c_changeFromPrefix1, StringComparison.OrdinalIgnoreCase))
+                {
+                    changeFrom = c_changeFromPrefix1;
+                }
+                else if (fn.StartsWith(c_changeFromPrefix2, StringComparison.OrdinalIgnoreCase))
+                {
+                    changeFrom = c_changeFromPrefix2;
+                }
+
+                if (changeFrom != null)
                 {
                     AnnounceFile(fi, ref ann);
 
                     // Use the original filepath as the starting point unless, for some reason, the prefix is different.
-                    string fn = Path.GetFileName(fi.OriginalFilepath);
-                    if (!fn.StartsWith(c_changeFromPrefix, StringComparison.OrdinalIgnoreCase)) // Paranoid code
+                    fn = Path.GetFileName(fi.OriginalFilepath);
+                    if (!fn.StartsWith(changeFrom, StringComparison.OrdinalIgnoreCase)) // Paranoid code
                         fn = Path.GetFileName(fi.Filepath);
 
                     // Create the new path and make it unique
                     string newPath = Path.Combine(Path.GetDirectoryName(fi.Filepath),
-                        string.Concat(c_changeToPrefix, fn.Substring(c_changeFromPrefix.Length)));
+                        string.Concat(c_changeToPrefix, fn.Substring(changeFrom.Length)));
                     MediaFile.MakeFilepathUnique(ref newPath);
 
                     // Rename

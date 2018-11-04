@@ -20,36 +20,43 @@ namespace FMPhotoFinisher
     /// </summary>
     class MediaFile : IDisposable
     {
+        const string c_ffmpegVideoSettings = "-pix_fmt yuv420p -c:v libx264 -profile:v main -level:v 3.1 -crf 18";
+        const string c_ffmpegAudioSettings = "-c:a aac"; // Let it use the default quality settings
+
+        const string c_jpgExt = ".jpg";
+        const string c_mp4Ext = ".mp4";
+        const string c_m4aExt = ".m4a";
+
         #region Static Members
 
         static Encoding s_Utf8NoBOM = new UTF8Encoding(false);
 
         static Dictionary<string, MediaType> s_mediaExtensions = new Dictionary<string, MediaType>()
         {
-            {".jpg", MediaType.Image},
+            {c_jpgExt, MediaType.Image},
             {".jpeg", MediaType.Image},
-            {".mp4", MediaType.Video},
+            {c_mp4Ext, MediaType.Video},
             {".avi", MediaType.Video},
             {".mov", MediaType.Video},
             {".mpg", MediaType.Video},
             {".mpeg", MediaType.Video},
-            {".m4a", MediaType.Audio},
+            {c_m4aExt, MediaType.Audio},
             {".mp3", MediaType.Audio},
             {".wav", MediaType.Audio}
         };
 
         static HashSet<string> s_isomExtensions = new HashSet<string>()
         {
-            ".mp4", ".mov", ".m4a"
+            c_mp4Ext, ".mov", c_m4aExt
         };
 
         // Preferred formats (by media type
         static string[] s_preferredExtensions = new string[]
         {
             null,   // Unknown
-            ".jpg", // Image
-            ".mp4", // Video
-            ".m4a"  // Audio
+            c_jpgExt, // Image
+            c_mp4Ext, // Video
+            c_m4aExt  // Audio
         };
 
         public static MediaType GetMediaType(string filenameOrExtension)
@@ -113,7 +120,6 @@ namespace FMPhotoFinisher
 
 
         string m_filepath;
-        string m_ext;
         MediaType m_mediaType;
 
         // Values from the Windows Property System
@@ -127,10 +133,10 @@ namespace FMPhotoFinisher
         public MediaFile(string filepath)
         {
             m_filepath = filepath;
-            m_ext = Path.GetExtension(filepath).ToLowerInvariant();
-            if (!s_mediaExtensions.TryGetValue(m_ext, out m_mediaType))
+            string ext = Path.GetExtension(filepath).ToLowerInvariant();
+            if (!s_mediaExtensions.TryGetValue(ext, out m_mediaType))
             {
-                throw new InvalidOperationException($"Media type '{m_ext}' is not supported.");
+                throw new InvalidOperationException($"Media type '{ext}' is not supported.");
             }
 
             Orientation = 1; // Defaults to normal/vertical
@@ -154,7 +160,7 @@ namespace FMPhotoFinisher
             }
 
             // Load Isom Properties
-            if (s_isomExtensions.Contains(m_ext))
+            if (s_isomExtensions.Contains(ext))
             {
                 var isom = FileMeta.IsomCoreMetadata.TryOpen(filepath);
                 if (isom != null)
@@ -183,29 +189,25 @@ namespace FMPhotoFinisher
 
         public string PreferredFormat { get { return s_preferredExtensions[(int)m_mediaType]; } }
 
-        public bool IsPreferredFormat { get { return string.Equals(m_ext, PreferredFormat, StringComparison.Ordinal); } }
+        public bool IsPreferredFormat { get { return string.Equals(Path.GetExtension(m_filepath), PreferredFormat, StringComparison.OrdinalIgnoreCase); } }
 
         public bool TranscodeToPreferredFormat(ProgressReporter reporter)
         {
-            switch (m_ext)
+            string ext = Path.GetExtension(m_filepath);
+            if (string.Equals(ext, PreferredFormat, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (m_mediaType == MediaType.Image)
             {
-                case ".jpeg":
-                    return ChangeExtensionTo(".jpg");
-
-                case ".avi":
-                case ".mov":
-                case ".mpg":
-                case ".mpeg":
-                    return TranscodeVideo(reporter);
-
-                case ".mp3":
-                case ".wav":
-                    return TranscodeAudio();
-                
-                // For all others do nothing
+                Debug.Assert(ext.Equals(".jpeg", StringComparison.OrdinalIgnoreCase));
+                ChangeExtensionTo(c_jpgExt);
+                return true;
             }
 
-            return true;
+            if (m_mediaType != MediaType.Audio && m_mediaType != MediaType.Video)
+                return false;
+
+            return Transcode(reporter);
         }
 
         #region IDisposable Support
@@ -251,7 +253,6 @@ namespace FMPhotoFinisher
                 MakeFilepathUnique(ref newPath);
                 File.Move(m_filepath, newPath);
                 m_filepath = newPath;
-                m_ext = newExt;
             }
             catch
             {
@@ -261,11 +262,10 @@ namespace FMPhotoFinisher
         }
 
         const string c_FFMpeg = "FFMpeg.exe";
-        const string c_mp4Extension = ".mp4";
                
-        bool TranscodeVideo(ProgressReporter reporter)
+        bool Transcode(ProgressReporter reporter)
         {
-            string newPath = Path.ChangeExtension(m_filepath, c_mp4Extension);
+            string newPath = Path.ChangeExtension(m_filepath, PreferredFormat);
             MakeFilepathUnique(ref newPath);
 
             Process transcoder = null;
@@ -273,7 +273,19 @@ namespace FMPhotoFinisher
             try
             {
                 // Compose arguments
-                var arguments = $"-hide_banner -i {m_filepath} -pix_fmt yuv420p -c:v libx264 -profile:v main -level:v 3.1 -crf 18 -c:a aac -f mp4 {newPath}";
+                string arguments;
+                if (m_mediaType == MediaType.Video)
+                {
+                    arguments = $"-hide_banner -i {m_filepath} {c_ffmpegVideoSettings} {c_ffmpegAudioSettings} {newPath}";
+                }
+                else if (m_mediaType == MediaType.Audio)
+                {
+                    arguments = $"-hide_banner -i {m_filepath} {c_ffmpegAudioSettings} {newPath}";
+                }
+                else
+                {
+                    throw new InvalidOperationException();
+                }
 
                 // Prepare process start
                 var psi = new ProcessStartInfo(c_FFMpeg, arguments);
@@ -333,7 +345,6 @@ namespace FMPhotoFinisher
             {
                 File.Delete(m_filepath);
                 m_filepath = newPath;
-                m_ext = c_mp4Extension;
             }
             else
             {
@@ -341,11 +352,6 @@ namespace FMPhotoFinisher
             }
 
             return result;
-        }
-
-        bool TranscodeAudio()
-        {
-            return false;
         }
 
         #endregion // Private Members

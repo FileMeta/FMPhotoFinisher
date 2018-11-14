@@ -5,6 +5,11 @@ VisualStudioVersion = 15.0.28010.2046
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FMPhotoFinish", "FMPhotoFinish\FMPhotoFinish.csproj", "{F930532B-2890-46D6-BB01-8E6F86BE78CE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FMPhotoFinishGui", "FMPhotoFinishGui\FMPhotoFinishGui.csproj", "{0B2AD8AE-7BB2-4B38-856B-13CE8B220597}"
+	ProjectSection(ProjectDependencies) = postProject
+		{F930532B-2890-46D6-BB01-8E6F86BE78CE} = {F930532B-2890-46D6-BB01-8E6F86BE78CE}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +20,10 @@ Global
 		{F930532B-2890-46D6-BB01-8E6F86BE78CE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F930532B-2890-46D6-BB01-8E6F86BE78CE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F930532B-2890-46D6-BB01-8E6F86BE78CE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0B2AD8AE-7BB2-4B38-856B-13CE8B220597}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0B2AD8AE-7BB2-4B38-856B-13CE8B220597}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0B2AD8AE-7BB2-4B38-856B-13CE8B220597}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0B2AD8AE-7BB2-4B38-856B-13CE8B220597}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

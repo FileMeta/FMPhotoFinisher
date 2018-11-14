@@ -119,10 +119,15 @@ Other Options:
   -log <filename>  Log all operations to the specified file. If the file
                    exists then the new operations will be appended to the end
                    of the file.
+
+  -w               Wait for the user to press a key before exiting. This is
+                   handy when running from a shortcut with no console or when
+                   running under the debugger.
 ";
 
         static bool s_commandLineError;
         static bool s_showSyntax;
+        static bool s_waitBeforeExit;
 
         static void Main(string[] args)
         {
@@ -155,7 +160,12 @@ Other Options:
 #endif
             }
 
-            Win32Interop.ConsoleHelper.PromptAndWaitIfSoleConsole();
+            if (s_waitBeforeExit)
+            {
+                Console.WriteLine();
+                Console.WriteLine("Press any key to exit.");
+                Console.ReadKey();
+            }
         }
 
         static void ParseCommandLine(string[] args, PhotoFinisher photoFinisher)
@@ -197,6 +207,10 @@ Other Options:
                                 }
                                 photoFinisher.DestinationDirectory = Path.GetFullPath(dst);
                             }
+                            break;
+
+                        case "-w":
+                            s_waitBeforeExit = true;
                             break;
 
                         case "-sort":

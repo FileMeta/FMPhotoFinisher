@@ -42,7 +42,6 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="ConsoleHelper.cs" />
     <Compile Include="ExifToolWrapper.cs" />
     <Compile Include="IsomCoreMetadata.cs" />
     <Compile Include="JpegRotator.cs" />

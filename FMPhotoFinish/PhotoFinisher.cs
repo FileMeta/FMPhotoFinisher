@@ -39,14 +39,44 @@ namespace FMPhotoFinish
         /// </remarks>
         public ProgressReporter OnStatusMessage;
 
-        // Operations
+        #region Operations
+
+        /// <summary>
+        /// For canon cameras, changes name prefixes to all be IMG - thereby ensuring they sort in order.
+        /// </summary>
         public bool SetOrderedNames { get; set; }
+
+        /// <summary>
+        /// Auto-rotate images to the vertical position.
+        /// </summary>
         public bool AutoRotate { get; set; }
-        public string DestinationDirectory { get; set; }
+
+        /// <summary>
+        /// Move files (instead of copying them) to the destination directory.
+        /// </summary>
         public bool Move { get; set; }
+
+        /// <summary>
+        /// Auto-sort the images into directories according to date taken
+        /// </summary>
         public bool AutoSort { get; set; }
+
+        /// <summary>
+        /// Transcode audio and video files into the preferred format. Also renames .jpeg to .jpg
+        /// </summary>
         public bool Transcode { get; set; }
+
+        /// <summary>
+        /// Clean up date/time taken metadata including determining timezone where possible.
+        /// </summary>
         public bool DateFixup { get; set; }
+
+        #endregion Operations
+
+        /// <summary>
+        /// Sets the destination directory - files will be copied or moved there.
+        /// </summary>
+        public string DestinationDirectory { get; set; }
 
         public int SelectFiles(string path, bool recursive)
         {

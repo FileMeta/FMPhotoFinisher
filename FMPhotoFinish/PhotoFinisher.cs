@@ -74,7 +74,7 @@ namespace FMPhotoFinish
         #endregion Operations
 
         /// <summary>
-        /// Sets the destination directory - files will be copied or moved there.
+        /// The destination directory - files will be copied or moved there.
         /// </summary>
         public string DestinationDirectory { get; set; }
 

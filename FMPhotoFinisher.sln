@@ -1,9 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.27428.2015
+VisualStudioVersion = 15.0.28010.2046
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FMPhotoFinisher", "FMPhotoFinisher.csproj", "{8682374B-4831-4338-97EE-0F023CC2DF7C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FMPhotoFinish", "FMPhotoFinish\FMPhotoFinish.csproj", "{F930532B-2890-46D6-BB01-8E6F86BE78CE}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -11,15 +11,15 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{8682374B-4831-4338-97EE-0F023CC2DF7C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{8682374B-4831-4338-97EE-0F023CC2DF7C}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{8682374B-4831-4338-97EE-0F023CC2DF7C}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{8682374B-4831-4338-97EE-0F023CC2DF7C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F930532B-2890-46D6-BB01-8E6F86BE78CE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F930532B-2890-46D6-BB01-8E6F86BE78CE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F930532B-2890-46D6-BB01-8E6F86BE78CE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F930532B-2890-46D6-BB01-8E6F86BE78CE}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {2E210F20-308A-43BD-8B48-541BBB9FF025}
+		SolutionGuid = {C4F9099D-7F9E-4CA7-A731-26EDF08303CC}
 	EndGlobalSection
 EndGlobal

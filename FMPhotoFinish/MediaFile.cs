@@ -5,7 +5,7 @@ using System.IO;
 using System.Diagnostics;
 using System.Text;
 
-namespace FMPhotoFinisher
+namespace FMPhotoFinish
 {
     enum MediaType
     {
@@ -296,13 +296,32 @@ namespace FMPhotoFinisher
 
                 transcoder = Process.Start(psi);
 
+                bool wroteProgress = false;
+                var sb = new StringBuilder();
                 for (; ; )
                 {
-                    var line = transcoder.StandardError.ReadLine();
-                    if (line == null) break;
-                    reporter?.Invoke("Transcoding: " + line);
+                    int i = transcoder.StandardError.Read();
+                    if (i < 0) break;
+                    if (i == '\n')
+                    {
+                        sb.Clear();
+                    }
+                    else if (i == '\r' && transcoder.StandardError.Peek() != '\n')
+                    {
+                        reporter?.Invoke("Transcoding: " + sb.ToString());
+                        wroteProgress = true;
+                        sb.Clear();
+                    }
+                    else
+                    {
+                        sb.Append((char)i);
+                    }
                 }
                 transcoder.WaitForExit();
+                if (wroteProgress)
+                {
+                    reporter?.Invoke(null);
+                }
 
                 result = transcoder.ExitCode == 0;
             }

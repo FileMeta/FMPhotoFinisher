@@ -158,7 +158,6 @@ namespace FMPhotoFinish
 
             OnProgressMessage(null);
             OnProgressMessage("All operations complete!");
-            OnStatusMessage(null);
         }
 
         void ProcessMediaFiles()
@@ -233,7 +232,6 @@ namespace FMPhotoFinish
                     {
                         OnProgressMessage("      Transcode failed; original format retained.");
                     }
-                    OnStatusMessage(null);
                 }
 
                 if (DateFixup)

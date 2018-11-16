@@ -147,18 +147,19 @@ namespace FMPhotoFinisher
 
         #region Application Monitor Thread
 
+        const string c_exeName = "FMPhotoFinish.exe";
+
         void StartAppAndMonitor(string appName, string commandLine)
         {
 
             try
             {
                 // Compose arguments
-                string exe = @"C:\Users\brand\source\FileMeta\FMPhotoFinisher\FMPhotoFinish\bin\Debug\FMPhotoFinish.exe";
                 string arguments = @"-s ""E:\SampleData\PhotoFinisherUnitTest"" -d ""E:\FMPhotoFinisherTestOutput"" -autorot -orderedNames -transcode";
 
                 // Prepare process
                 var proc = new Process();
-                proc.StartInfo.FileName = exe;
+                proc.StartInfo.FileName = c_exeName;
                 proc.StartInfo.Arguments = arguments;
                 proc.StartInfo.UseShellExecute = false;
                 proc.StartInfo.CreateNoWindow = true; // Set to false if you want to monitor

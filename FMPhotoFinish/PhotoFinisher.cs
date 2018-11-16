@@ -227,7 +227,7 @@ namespace FMPhotoFinish
                 {
                     AnnounceFile(fi, ref ann);
                     OnProgressReport($"   Transcode to {mdf.PreferredFormat}");
-                    if (mdf.TranscodeToPreferredFormat(UpdateStatus))
+                    if (mdf.TranscodeToPreferredFormat(msg => OnStatusReport(msg)))
                     {
                         fi.Filepath = mdf.Filepath;
                         OnProgressReport($"      Transcoded to: {Path.GetFileName(mdf.Filepath)}");
@@ -245,13 +245,6 @@ namespace FMPhotoFinish
 
                 }
             }
-        }
-
-        // TODO: Replace this when I can look up anonymous functions
-        // Also add sensitivity to all status calls for null values.
-        void UpdateStatus(string s)
-        {
-            OnStatusReport(s);
         }
 
         void AnnounceFile(ProcessFileInfo fi, ref bool announced)

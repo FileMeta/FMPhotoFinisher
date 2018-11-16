@@ -31,8 +31,6 @@ namespace FMPhotoFinisher
             InitializeComponent();
         }
 
-        // TODO: Change TextBlock to FlowDocumentScrollViewer
-
         /// <summary>
         /// Write to the output control. Thread safe.
         /// </summary>

@@ -17,18 +17,17 @@ namespace FMPhotoFinish
         long m_selectedFilesSize;
 
         // Progress Reporting
-        // TODO: Change to event model
-        // (These should be events but I'm writing this in-flight and I don't remember
-        // the event pattern. Therefore I'm using straight delegates for the time being.
-        // I may or may not update in the future.)
-
-        public delegate void ProgressReporter(string message);
 
         /// <summary>
         /// Reports messages about operations starting or completing - for the user to read.
         /// Typically shown in a log format.
         /// </summary>
-        public ProgressReporter OnProgressMessage;
+        public event EventHandler<ProgressEventArgs> ProgressReported;
+
+        void OnProgressReport(string message)
+        {
+            ProgressReported?.Invoke(this, new ProgressEventArgs(message));
+        }
 
         /// <summary>
         /// Reports messages about partial completion (e.g. "3 of 5 copied").
@@ -37,7 +36,12 @@ namespace FMPhotoFinish
         /// This would typically be shown in a status bar. When sent to the console, it should be sent
         /// to stderr with a \r (not \r\n). A null or blank message should clear the status.
         /// </remarks>
-        public ProgressReporter OnStatusMessage;
+        public event EventHandler<ProgressEventArgs> StatusReported;
+
+        void OnStatusReport(string message)
+        {
+            StatusReported?.Invoke(this, new ProgressEventArgs(message));
+        }
 
         #region Operations
 
@@ -156,8 +160,8 @@ namespace FMPhotoFinish
 
             ProcessMediaFiles();
 
-            OnProgressMessage(null);
-            OnProgressMessage("All operations complete!");
+            OnProgressReport(null);
+            OnProgressReport("All operations complete!");
         }
 
         void ProcessMediaFiles()
@@ -204,7 +208,7 @@ namespace FMPhotoFinish
                     MediaFile.MakeFilepathUnique(ref newPath);
 
                     // Rename
-                    OnProgressMessage("   Rename to: " + Path.GetFileName(newPath));
+                    OnProgressReport("   Rename to: " + Path.GetFileName(newPath));
                     File.Move(fi.Filepath, newPath);
                     fi.Filepath = newPath;
                 }
@@ -215,22 +219,22 @@ namespace FMPhotoFinish
                 if (AutoRotate && mdf.Orientation != 1)
                 {
                     AnnounceFile(fi, ref ann);
-                    OnProgressMessage("   Autorotate");
+                    OnProgressReport("   Autorotate");
                     mdf.RotateToVertical();
                 }
 
                 if (Transcode && !mdf.IsPreferredFormat)
                 {
                     AnnounceFile(fi, ref ann);
-                    OnProgressMessage($"   Transcode to {mdf.PreferredFormat}");
+                    OnProgressReport($"   Transcode to {mdf.PreferredFormat}");
                     if (mdf.TranscodeToPreferredFormat(UpdateStatus))
                     {
                         fi.Filepath = mdf.Filepath;
-                        OnProgressMessage($"      Transcoded to: {Path.GetFileName(mdf.Filepath)}");
+                        OnProgressReport($"      Transcoded to: {Path.GetFileName(mdf.Filepath)}");
                     }
                     else
                     {
-                        OnProgressMessage("      Transcode failed; original format retained.");
+                        OnProgressReport("      Transcode failed; original format retained.");
                     }
                 }
 
@@ -247,14 +251,14 @@ namespace FMPhotoFinish
         // Also add sensitivity to all status calls for null values.
         void UpdateStatus(string s)
         {
-            OnStatusMessage(s);
+            OnStatusReport(s);
         }
 
         void AnnounceFile(ProcessFileInfo fi, ref bool announced)
         {
             if (!announced)
             {
-                OnProgressMessage(Path.GetFileName(fi.Filepath));
+                OnProgressReport(Path.GetFileName(fi.Filepath));
                 announced = true;
             }
         }
@@ -265,7 +269,7 @@ namespace FMPhotoFinish
             string dstDirectory = DestinationDirectory;
             // TODO: If -sort then add a temporary directory.
 
-            OnProgressMessage($"{verb} media files to working folder: {dstDirectory}.");
+            OnProgressReport($"{verb} media files to working folder: {dstDirectory}.");
 
             uint startTicks = (uint)Environment.TickCount;
             long bytesCopied = 0;
@@ -275,7 +279,7 @@ namespace FMPhotoFinish
             {
                 if (bytesCopied == 0)
                 {
-                    OnStatusMessage($"{verb} file {n + 1} of {m_selectedFiles.Count}");
+                    OnStatusReport($"{verb} file {n + 1} of {m_selectedFiles.Count}");
                 }
                 else
                 {
@@ -289,7 +293,7 @@ namespace FMPhotoFinish
                     double remaining = (m_selectedFilesSize - bytesCopied) / bps;
                     TimeSpan remain = new TimeSpan(((long)((m_selectedFilesSize - bytesCopied) / bps)) * 10000000L);
 
-                    OnStatusMessage($"{verb} file {n + 1} of {m_selectedFiles.Count}. Time remaining: {remain.FmtCustom()} MBps: {(bps / (1024 * 1024)):#,###.###}");
+                    OnStatusReport($"{verb} file {n + 1} of {m_selectedFiles.Count}. Time remaining: {remain.FmtCustom()} MBps: {(bps / (1024 * 1024)):#,###.###}");
                 }
 
                 string dstFilepath = Path.Combine(DestinationDirectory, Path.GetFileName(fi.OriginalFilepath));
@@ -316,8 +320,8 @@ namespace FMPhotoFinish
                 elapsed = new TimeSpan(ticksElapsed * 10000L);
             }
 
-            OnStatusMessage(null);
-            OnProgressMessage($"{verb} complete. {m_selectedFiles.Count} files, {bytesCopied / (1024.0 * 1024.0): #,##0.0} MB, {elapsed.FmtCustom()} elapsed");
+            OnStatusReport(null);
+            OnProgressReport($"{verb} complete. {m_selectedFiles.Count} files, {bytesCopied / (1024.0 * 1024.0): #,##0.0} MB, {elapsed.FmtCustom()} elapsed");
         }
 
         private static char[] s_wildcards = new char[] { '*', '?' };
@@ -328,4 +332,15 @@ namespace FMPhotoFinish
         }
 
     } // Class PhotoFinisher
+
+    class ProgressEventArgs : EventArgs
+    {
+        public ProgressEventArgs(string message)
+        {
+
+            Message = message;
+        }
+
+        public string Message { get; private set; }
+    }
 } // Namespace

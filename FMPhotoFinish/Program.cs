@@ -142,8 +142,8 @@ Other Options:
             try
             {
                 var photoFinisher = new PhotoFinisher();
-                photoFinisher.OnProgressMessage = ReportProgress;
-                photoFinisher.OnStatusMessage = ReportStatus;
+                photoFinisher.ProgressReported += ReportProgress;
+                photoFinisher.StatusReported += ReportStatus;
                 ParseCommandLine(args, photoFinisher);
 
                 if (s_commandLineError)
@@ -305,25 +305,25 @@ Other Options:
 
         } // ParseCommandLine
 
-        static void ReportProgress(string s)
+        static void ReportProgress(object obj, ProgressEventArgs eventArgs)
         {
-            Console.Out.WriteLine(s ?? string.Empty);
+            Console.Out.WriteLine(eventArgs.Message ?? string.Empty);
             if (s_logWriter != null)
             {
-                s_logWriter.WriteLine(s ?? string.Empty);
+                s_logWriter.WriteLine(eventArgs.Message ?? string.Empty);
             }
         }
         
-        static void ReportStatus(string s)
+        static void ReportStatus(object obj, ProgressEventArgs eventArgs)
         {
-            if (string.IsNullOrEmpty(s))
+            if (string.IsNullOrEmpty(eventArgs.Message))
             {
                 Console.Error.WriteLine();
             }
             else
             {
                 Console.ForegroundColor = ConsoleColor.Green;
-                Console.Error.Write(s);
+                Console.Error.Write(eventArgs.Message);
                 Console.Error.Write('\r');
                 Console.ForegroundColor = ConsoleColor.White;
             }

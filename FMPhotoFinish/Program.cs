@@ -9,8 +9,8 @@ using System.Text;
  *  -transcode video
  *  -orderednames
  *  -transcode audio
- * Next:
  *  -log
+ * Next:
  *  preserve metadata on transcode
  *  -datefixup
  *  -sort
@@ -116,18 +116,26 @@ Other Options:
   -h               Print this help text and exit (ignoring all other
                    commands).
 
-  -log <filename>  Log all operations to the specified file. If the file
-                   exists then the new operations will be appended to the end
-                   of the file.
+  -log             Log all operations. The file will be named
+                   ""<date> <time> FMPhotoFinish Log.txt"". If -d is
+                   specified then the log will be placed in that folder.
+                   Otherwise, the log is placed in a ""logs"" directory under
+                   the user's ""documents"" folder. (Typically
+                   ""C:\users\<username>\documents\logs"".)
 
   -w               Wait for the user to press a key before exiting. This is
                    handy when running from a shortcut with no console or when
                    running under the debugger.
 ";
 
+        const string c_logsFolder = "logs";
+        const string c_logFileSuffix = "FMPhotoFinish Log.txt";
+
         static bool s_commandLineError;
         static bool s_showSyntax;
         static bool s_waitBeforeExit;
+        static bool s_log;
+        static TextWriter s_logWriter;
 
         static void Main(string[] args)
         {
@@ -148,6 +156,34 @@ Other Options:
                 }
                 else
                 {
+                    // Prepare logfile
+                    if (s_log)
+                    {
+                        string logDir = photoFinisher.DestinationDirectory;
+                        if (string.IsNullOrEmpty(logDir))
+                        {
+                            logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), c_logsFolder);
+                            if (!Directory.Exists(logDir))
+                            {
+                                Directory.CreateDirectory(logDir);
+                            }
+                        }
+
+                        var now = DateTime.Now;
+                        var logfilename = Path.Combine(logDir,
+                            $"{now.ToString("yyyy-MM-dd hhmmss")} {c_logFileSuffix}");
+
+                        s_logWriter = new StreamWriter(logfilename, false, Encoding.UTF8);
+
+                        // Metadata in MicroYAML format
+                        s_logWriter.WriteLine("---");
+                        s_logWriter.WriteLine($"date: {now.ToString("yyyy-MM-dd hh:mm:ss")}");
+                        s_logWriter.WriteLine("title: FMPhotoFinish Log");
+                        s_logWriter.WriteLine($"commandline: {Environment.CommandLine}");
+                        s_logWriter.WriteLine("...");
+                    }
+
+                    // Do the work.
                     photoFinisher.PerformOperations();
                 }
             }
@@ -158,6 +194,18 @@ Other Options:
 #else
                 Console.WriteLine(err.Message);
 #endif
+                if (s_logWriter != null)
+                {
+                    s_logWriter.WriteLine(err.ToString());
+                }
+            }
+            finally
+            {
+                if (s_logWriter != null)
+                {
+                    s_logWriter.Dispose();
+                    s_logWriter = null;
+                }
             }
 
             if (s_waitBeforeExit)
@@ -237,6 +285,10 @@ Other Options:
                             photoFinisher.DateFixup = true;
                             break;
 
+                        case "-log":
+                            s_log = true;
+                            break;
+
                         default:
                             Console.WriteLine($"Command-line syntax error: '{args[i]}' is not a recognized command.");
                             Console.WriteLine("Use '-h' for syntax help");
@@ -256,6 +308,10 @@ Other Options:
         static void ReportProgress(string s)
         {
             Console.Out.WriteLine(s ?? string.Empty);
+            if (s_logWriter != null)
+            {
+                s_logWriter.WriteLine(s ?? string.Empty);
+            }
         }
         
         static void ReportStatus(string s)
@@ -266,16 +322,10 @@ Other Options:
             }
             else
             {
-#if DEBUG && false
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine(s);
-                Console.ForegroundColor = ConsoleColor.White;
-#else
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.Error.Write(s);
                 Console.Error.Write('\r');
                 Console.ForegroundColor = ConsoleColor.White;
-#endif
             }
         }
 

@@ -211,7 +211,7 @@ namespace FMPhotoFinisher
             {
                 for (; ; )
                 {
-                    string line = m_proc.StandardOutput.ReadLine();
+                    string line = m_proc.StandardError.ReadLine();
                     if (line == null) break;
                     SetProgress(line);
                 }

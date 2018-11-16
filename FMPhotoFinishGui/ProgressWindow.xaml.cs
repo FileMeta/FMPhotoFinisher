@@ -147,10 +147,6 @@ namespace FMPhotoFinisher
 
         #region Application Monitor Thread
 
-        Process m_proc;
-        Thread m_stdOutThread;
-        Thread m_stdErrThread;
-
         void StartAppAndMonitor(string appName, string commandLine)
         {
 
@@ -160,24 +156,23 @@ namespace FMPhotoFinisher
                 string exe = @"C:\Users\brand\source\FileMeta\FMPhotoFinisher\FMPhotoFinish\bin\Debug\FMPhotoFinish.exe";
                 string arguments = @"-s ""E:\SampleData\PhotoFinisherUnitTest"" -d ""E:\FMPhotoFinisherTestOutput"" -autorot -orderedNames -transcode";
 
-                // Prepare process start
-                var psi = new ProcessStartInfo(exe, arguments);
-                psi.UseShellExecute = false;
-                psi.CreateNoWindow = true; // Set to false if you want to monitor
-                psi.RedirectStandardOutput = true;
-                psi.StandardOutputEncoding = Encoding.UTF8;
-                psi.RedirectStandardError = true;
-                psi.StandardErrorEncoding = Encoding.UTF8;
-
-                m_proc = Process.Start(psi);
-
-                m_stdOutThread = new Thread(StdOutThreadMain);
-                m_stdOutThread.Start();
-
-                m_stdErrThread = new Thread(StdErrThreadMain);
-                m_stdErrThread.Start();
-
-                // TODO: Set up an event on the process and clean up when it exits
+                // Prepare process
+                var proc = new Process();
+                proc.StartInfo.FileName = exe;
+                proc.StartInfo.Arguments = arguments;
+                proc.StartInfo.UseShellExecute = false;
+                proc.StartInfo.CreateNoWindow = true; // Set to false if you want to monitor
+                proc.StartInfo.RedirectStandardOutput = true;
+                proc.StartInfo.StandardOutputEncoding = Encoding.UTF8;
+                proc.StartInfo.RedirectStandardError = true;
+                proc.StartInfo.StandardErrorEncoding = Encoding.UTF8;
+                proc.OutputDataReceived += OutputDataReceived;
+                proc.ErrorDataReceived += ErrorDataReceived;
+                proc.Exited += ProcessExited;
+                proc.EnableRaisingEvents = true;
+                proc.Start();
+                proc.BeginOutputReadLine();
+                proc.BeginErrorReadLine();
             }
             catch (Exception err)
             {
@@ -185,40 +180,21 @@ namespace FMPhotoFinisher
             }
         }
 
-        private void StdOutThreadMain()
+        private void OutputDataReceived(object sender, DataReceivedEventArgs e)
         {
-            try
-            {
-                for (; ; )
-                {
-                    string line = m_proc.StandardOutput.ReadLine();
-                    if (line == null) break;
-                    WriteLine(line);
-                }
-
-            }
-            catch (Exception err)
-            {
-                WriteLine(err.ToString());
-            }
+            WriteLine(e.Data ?? string.Empty);
         }
 
-        private void StdErrThreadMain()
+        private void ErrorDataReceived(object sender, DataReceivedEventArgs e)
         {
-            try
-            {
-                for (; ; )
-                {
-                    string line = m_proc.StandardError.ReadLine();
-                    if (line == null) break;
-                    SetProgress(line);
-                }
+            SetProgress(e.Data);
+        }
 
-            }
-            catch (Exception err)
-            {
-                WriteLine(err.ToString());
-            }
+        private void ProcessExited(object sender, EventArgs args)
+        {
+            var proc = sender as Process;
+            proc?.Dispose();
+            WriteLine("Process exit.");
         }
 
         #endregion Application Monitor Thread

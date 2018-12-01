@@ -122,12 +122,16 @@ namespace FMPhotoFinish
         string m_filepath;
         MediaType m_mediaType;
 
-        // Values from the Windows Property System
+        // Writable Values from the Windows Property System
+        // TODO: When all is done, are these used anyway?
         Dictionary<PROPERTYKEY, object> m_properties = new Dictionary<PROPERTYKEY, object>();
 
+        // Critical values from the Windows Property System
+        TimeSpan? m_psDuration;
+
         // Values from the ISOM container (.MOV, .MP4, and .M4A formats)
-        DateTime? m_IsomCreationTime = null;
-        DateTime? m_IsomModificationTime = null;
+        DateTime? m_isomCreationTime = null;
+        DateTime? m_isomModificationTime = null;
         TimeSpan? m_isomDuration = null;
 
         public MediaFile(string filepath)
@@ -152,6 +156,14 @@ namespace FMPhotoFinish
                     {
                         Orientation = (int)(ushort)propstore.GetValue(pk);
                     }
+
+                    // System.Media.Duration
+                    if (pk.Equals(PropertyKeys.Duration))
+                    {
+                        var duration = (ulong)propstore.GetValue(pk);
+                        m_psDuration = new TimeSpan((long)duration);
+                    }
+
                     else if (IsCopyable(pk))
                     {
                         m_properties[pk] = propstore.GetValue(pk);
@@ -167,8 +179,8 @@ namespace FMPhotoFinish
                 {
                     using (isom)
                     {
-                        m_IsomCreationTime = isom.CreationTime;
-                        m_IsomModificationTime = isom.ModificationTime;
+                        m_isomCreationTime = isom.CreationTime;
+                        m_isomModificationTime = isom.ModificationTime;
                         m_isomDuration = isom.Duration;
                     }
                 }
@@ -265,6 +277,12 @@ namespace FMPhotoFinish
                
         bool Transcode(ProgressReporter reporter)
         {
+            // If inbound file does not have a duration, it's not a transcodeable media file
+            if (m_psDuration == null)
+            {
+                return false;
+            }
+
             string newPath = Path.ChangeExtension(m_filepath, PreferredFormat);
             MakeFilepathUnique(ref newPath);
 
@@ -344,16 +362,13 @@ namespace FMPhotoFinish
                 }
                 else
                 {
-                    // TODO: Compare against duration data from other sources than just isom.
-
                     using (isom)
                     {
-                        if (m_isomDuration != null)
+                        Debug.Assert(m_psDuration != null); // Should have exited early if duration is null.
+                        if (isom.Duration == null
+                            || Math.Abs(m_psDuration.Value.Ticks - isom.Duration.Ticks) > (250L * 10000L)) // 1/4 second
                         {
-                            if (Math.Abs(m_isomDuration.Value.Ticks - isom.Duration.Ticks) > (250L * 10000L)) // 1/4 second
-                            {
-                                result = false;
-                            }
+                            result = false;
                         }
                     }
                 }
@@ -373,9 +388,9 @@ namespace FMPhotoFinish
             return result;
         }
 
-        #endregion // Private Members
+#endregion // Private Members
 
-        #region Private Static Members
+#region Private Static Members
 
         // Cache whether a propery is copyable
         static Dictionary<PROPERTYKEY, bool> s_propertyIsCopyable = new Dictionary<PROPERTYKEY, bool>();
@@ -397,26 +412,32 @@ namespace FMPhotoFinish
             return result;
         }
 
-        #endregion
+#endregion
 
-        #region PropertyStore
+#region Init and Shutdown
 
         static PropertySystem s_propSystem = new PropertySystem();
-        static readonly PropSysStaticDisposer s_psDisposer = new PropSysStaticDisposer();
+        static ExifToolWrapper.ExifTool s_exifTool = new ExifToolWrapper.ExifTool();
+        static readonly StaticDisposer s_psDisposer = new StaticDisposer();
 
-        private sealed class PropSysStaticDisposer
+        private sealed class StaticDisposer
         {
-            ~PropSysStaticDisposer()
+            ~StaticDisposer()
             {
                 if (s_propSystem != null)
                 {
                     s_propSystem.Dispose();
                     s_propSystem = null;
                 }
+                if (s_exifTool != null)
+                {
+                    s_exifTool.Dispose();
+                    s_exifTool = null;
+                }
             }
         }
 
-        #endregion
+#endregion
     }
 
     /// <summary>
@@ -426,6 +447,7 @@ namespace FMPhotoFinish
     {
         public static PROPERTYKEY Orientation = new PROPERTYKEY("14B81DA1-0135-4D31-96D9-6CBFC9671A99", 274);
         public static PROPERTYKEY DateTaken = new PROPERTYKEY("14B81DA1-0135-4D31-96D9-6CBFC9671A99", 36867);
+        public static PROPERTYKEY Duration = new PROPERTYKEY("64440490-4C8B-11D1-8B70-080036B11A03", 3);
 
     }
 

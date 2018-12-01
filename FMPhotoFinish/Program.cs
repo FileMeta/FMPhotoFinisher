@@ -16,6 +16,13 @@ using System.Text;
  *  -sort
  *  -st
  *  -sDCF
+ *  add uuid for each image
+ * 
+ * Design Principles:
+ *  * No command-line option required to preserve, transfer, or add information. For example,
+ *    copying the timezone from a makernote field to a custom field should be done regardless
+ *    of command-line options. But, changing date_created from local time to UTC requires the
+ *    "-datefixup" option.
  * 
  * Framework: Process the queue
  *   Retrieve metadata

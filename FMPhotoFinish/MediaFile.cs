@@ -110,6 +110,30 @@ namespace FMPhotoFinish
             } while (File.Exists(filepath));
         }
 
+        /// <summary>
+        /// Parses a timezone string into a signed integer representing the number of minutes offset from UTC.
+        /// </summary>
+        /// <param name="s">The timezone string to parse.</param>
+        /// <param name="result">The parsed timezone.</param>
+        /// <returns>True if successful, else false.</returns>
+        /// <remarks>Example timezone values: "-05:00" "-5", "+06:00", "+6", "+10:30".</remarks>
+        public static bool TryParseTimeZone(string s, out int result)
+        {
+            result = 0;
+            var parts = s.Split(':');
+            if (parts.Length < 1 || parts.Length > 2) return false;
+            int n;
+            if (!int.TryParse(parts[0], out n)) return false;
+            result = n * 60;
+            if (parts.Length > 1)
+            {
+                if (!int.TryParse(parts[1], out n)) return false;
+                if (s[0] == '-') n = -n;
+                result += n;
+            }
+            return true;
+        }
+
         #endregion
 
         #region Delegates
@@ -124,7 +148,13 @@ namespace FMPhotoFinish
 
         // Writable Values from the Windows Property System
         // TODO: When all is done, are these used anyway?
-        Dictionary<PROPERTYKEY, object> m_properties = new Dictionary<PROPERTYKEY, object>();
+        Dictionary<PROPERTYKEY, object> m_propsToSet = new Dictionary<PROPERTYKEY, object>();
+
+        // Values that may come from any of several sources
+        string m_make;
+        string m_model;
+        string m_imageUniqueId;
+        int? m_timezone; // In minutes offset from UTC, positive or negative
 
         // Critical values from the Windows Property System
         TimeSpan? m_psDuration;
@@ -164,14 +194,11 @@ namespace FMPhotoFinish
                         m_psDuration = new TimeSpan((long)duration);
                     }
 
-                    else if (IsCopyable(pk))
-                    {
-                        m_properties[pk] = propstore.GetValue(pk);
-                    }
                 }
             }
 
             // Load Isom Properties
+            // TODO: Verify that these are used.
             if (s_isomExtensions.Contains(ext))
             {
                 var isom = FileMeta.IsomCoreMetadata.TryOpen(filepath);
@@ -185,6 +212,55 @@ namespace FMPhotoFinish
                     }
                 }
             }
+
+            // Load ExifTool Properties
+            {
+                var exifProperties = new List<KeyValuePair<string, string>>();
+                s_exifTool.GetProperties(m_filepath, exifProperties);
+                string software = null;
+
+                foreach (var pair in exifProperties)
+                {
+                    int colon = pair.Key.IndexOf(':');
+                    string key = (colon >= 0) ? pair.Key.Substring(colon + 1) : pair.Key;
+                    switch (key.ToLowerInvariant())
+                    {
+                        case "timezone":
+                            if (m_timezone == null)
+                            {
+                                int tz;
+                                if (TryParseTimeZone(pair.Value, out tz))
+                                {
+                                    m_timezone = tz;
+                                }
+                            }
+                            break;
+
+                        case "make":
+                            if (m_make == null)
+                            {
+                                m_make = pair.Value;
+                            }
+                            break;
+
+                        case "model":
+                            if (m_make == null)
+                            {
+                                m_model = pair.Value;
+                            }
+                            break;
+
+                        // For AVI Video
+                        case "software":
+                            software = pair.Value;
+                            break;
+                    }
+                }
+
+                if (m_make == null) m_make = software;
+                if (m_model == null) m_model = software;
+            }
+
         }
 
         public string Filepath { get { return m_filepath; } }
@@ -227,6 +303,25 @@ namespace FMPhotoFinish
         protected virtual void Dispose(bool disposing)
         {
             if (m_filepath == null) return;
+
+            if (m_propsToSet.Count > 0)
+            {
+#if DEBUG
+                Debug.WriteLine(Path.GetFileName(m_filepath));
+                foreach (var pair in m_propsToSet)
+                {
+                    Debug.WriteLine($"   {pair.Value}");
+                }
+#endif
+                using (var ps = PropertyStore.Open(m_filepath, true))
+                {
+                    foreach (var pair in m_propsToSet)
+                    {
+                        ps.SetValue(pair.Key, pair.Value);
+                    }
+                    ps.Commit();
+                }
+            }
 
             if (!disposing)
             {
@@ -379,6 +474,10 @@ namespace FMPhotoFinish
             {
                 File.Delete(m_filepath);
                 m_filepath = newPath;
+                if (m_make != null)
+                    m_propsToSet.Add(PropertyKeys.Make, m_make);
+                if (m_model != null)
+                    m_propsToSet.Add(PropertyKeys.Model, m_model);
             }
             else
             {
@@ -448,7 +547,8 @@ namespace FMPhotoFinish
         public static PROPERTYKEY Orientation = new PROPERTYKEY("14B81DA1-0135-4D31-96D9-6CBFC9671A99", 274);
         public static PROPERTYKEY DateTaken = new PROPERTYKEY("14B81DA1-0135-4D31-96D9-6CBFC9671A99", 36867);
         public static PROPERTYKEY Duration = new PROPERTYKEY("64440490-4C8B-11D1-8B70-080036B11A03", 3);
-
+        public static PROPERTYKEY Make = new PROPERTYKEY("14b81da1-0135-4d31-96d9-6cbfc9671a99", 271);
+        public static PROPERTYKEY Model = new PROPERTYKEY("14b81da1-0135-4d31-96d9-6cbfc9671a99", 272);
     }
 
 }

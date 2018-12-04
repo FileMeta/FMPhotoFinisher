@@ -146,14 +146,11 @@ namespace FMPhotoFinish
         string m_filepath;
         MediaType m_mediaType;
 
-        // Writable Values from the Windows Property System
-        // TODO: When all is done, are these used anyway?
         Dictionary<PROPERTYKEY, object> m_propsToSet = new Dictionary<PROPERTYKEY, object>();
 
         // Values that may come from any of several sources
         string m_make;
         string m_model;
-        string m_imageUniqueId;
         int? m_timezone; // In minutes offset from UTC, positive or negative
 
         // Critical values from the Windows Property System

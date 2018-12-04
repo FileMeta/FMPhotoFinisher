@@ -3,9 +3,9 @@
 name: WinShellPropertyStore.cs
 description: C# Wrapper for Windows Property System
 url: https://github.com/FileMeta/WinShellPropertyStore/raw/master/WinShellPropertyStore.cs
-version: 1.4.1
+version: 1.5
 keywords: CodeBit
-dateModified: 2018-04-13
+dateModified: 2018-12-04
 license: http://unlicense.org
 # Metadata in MicroYaml format. See http://filemeta.org and http://schema.org
 ...
@@ -67,6 +67,14 @@ namespace WinShell
     /// </remarks>
     class PropertyStore : IDisposable
     {
+
+#if !RAW_PROPERTY_STORE
+        static PROPERTYKEY s_pkContentType = new PROPERTYKEY("D5CDD502-2E9C-101B-9397-08002B2CF9AE", 26); // System.ContentType
+        static PROPERTYKEY s_pkItemDate = new PROPERTYKEY("f7db74b4-4287-4103-afba-f1b13dcd75cf", 100); // System.ItemDate
+        static PROPERTYKEY s_pkDateTaken = new PROPERTYKEY("14B81DA1-0135-4D31-96D9-6CBFC9671A99", 36867);
+        static PROPERTYKEY s_pkDateEncoded = new PROPERTYKEY("2e4b640d-5019-46d8-8881-55414cc5caa0", 100); // System.Media.DateEncoded
+#endif
+
         /// <summary>
         /// Open the property store for a file.
         /// </summary>
@@ -85,10 +93,16 @@ namespace WinShell
 
         private PropertyStoreInterop.IPropertyStore m_IPropertyStore;
         private PropertyStoreInterop.IPropertyStoreCapabilities m_IPropertyStoreCapabilities;
+#if !RAW_PROPERTY_STORE
+        private string m_contentType;
+#endif
 
         private PropertyStore(PropertyStoreInterop.IPropertyStore propertyStore)
         {
             m_IPropertyStore = propertyStore;
+#if !RAW_PROPERTY_STORE
+            m_contentType = GetValue(s_pkContentType) as string;
+#endif
         }
 
         /// <summary>
@@ -121,8 +135,6 @@ namespace WinShell
             return key;
         }
 
-        static PROPERTYKEY s_pkDateTaken = new PROPERTYKEY("14B81DA1-0135-4D31-96D9-6CBFC9671A99", 36867);
-
         /// <summary>
         /// Gets data for a specific property.
         /// </summary>
@@ -139,7 +151,7 @@ namespace WinShell
                 value = PropertyStoreInterop.PropVariantToObject(pv);
 
 #if !RAW_PROPERTY_STORE
-                // PropertyStore returns all DateTimes in UTC. However, DateTaken is stored in local time.
+                // PropertyStore returns all DateTimes in UTC. However, DateTaken certain fields are stored in local time.
                 // The conversion to UTC will not be correct unless the timezone on the camera, when the
                 // photo was taken, is the same as the timezone on the computer when the value is retrieved.
                 // We fix this up by converting back to local time using the computer's current timezone
@@ -148,7 +160,10 @@ namespace WinShell
                 // managed DateTime format has a property that indicates whether the time is local or UTC.
                 // Callers should still take care to interpret the time as local to where the photo was taken
                 // and not local to where the computer is at present.
-                if (key.Equals(s_pkDateTaken) && value != null)
+                if ((string.Equals(m_contentType, "image/jpeg")
+                        && (key.Equals(s_pkItemDate) || key.Equals(s_pkDateTaken)))
+                    || (string.Equals(m_contentType, "video/avi")
+                        && (key.Equals(s_pkItemDate) || key.Equals(s_pkDateEncoded))))
                 {
                     DateTime dt = (DateTime)value;
                     Debug.Assert(dt.Kind == DateTimeKind.Utc);

@@ -3,9 +3,9 @@
 name: WinShellPropertyStore.cs
 description: C# Wrapper for Windows Property System
 url: https://github.com/FileMeta/WinShellPropertyStore/raw/master/WinShellPropertyStore.cs
-version: 1.5
+version: 1.6
 keywords: CodeBit
-dateModified: 2018-12-04
+dateModified: 2018-12-13
 license: http://unlicense.org
 # Metadata in MicroYaml format. See http://filemeta.org and http://schema.org
 ...
@@ -160,10 +160,11 @@ namespace WinShell
                 // managed DateTime format has a property that indicates whether the time is local or UTC.
                 // Callers should still take care to interpret the time as local to where the photo was taken
                 // and not local to where the computer is at present.
-                if ((string.Equals(m_contentType, "image/jpeg")
+                if (value != null
+                    && ((string.Equals(m_contentType, "image/jpeg")
                         && (key.Equals(s_pkItemDate) || key.Equals(s_pkDateTaken)))
                     || (string.Equals(m_contentType, "video/avi")
-                        && (key.Equals(s_pkItemDate) || key.Equals(s_pkDateEncoded))))
+                        && (key.Equals(s_pkItemDate) || key.Equals(s_pkDateEncoded)))))
                 {
                     DateTime dt = (DateTime)value;
                     Debug.Assert(dt.Kind == DateTimeKind.Utc);
@@ -474,8 +475,9 @@ namespace WinShell
                 new PROPERTYKEY("D5CDD502-2E9C-101B-9397-08002B2CF9AE", 26), // System.ContentType
                 new PROPERTYKEY("D6942081-D53B-443D-AD47-5E059D9CD27A", 2), // System.Shell.SFGAOFlagsStrings
                 new PROPERTYKEY("09329b74-40a3-4c68-bf07-af9a572f607c", 100), // System.IsFolder
-                new PROPERTYKEY("14b81da1-0135-4d31-96d9-6cbfc9671a99", 18258) // System.DateImported
-            });
+                new PROPERTYKEY("14b81da1-0135-4d31-96d9-6cbfc9671a99", 18258), // System.DateImported
+                new PROPERTYKEY("2e4b640d-5019-46d8-8881-55414cc5caa0", 100) // System.Media.DateEncoded
+    });
 #endif
 
         /// <summary>

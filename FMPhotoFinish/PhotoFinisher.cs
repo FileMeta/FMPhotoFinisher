@@ -214,8 +214,11 @@ namespace FMPhotoFinish
                 }
             }
 
-            using (var mdf = new MediaFile(fi.Filepath))
+            using (var mdf = new MediaFile(fi.Filepath, Path.GetFileName(fi.OriginalFilepath)))
             {
+                mdf.OriginalDateCreated = fi.OriginalDateCreated;
+                mdf.OriginalDateModified = fi.OriginalDateModified;
+
                 if (AutoRotate && mdf.Orientation != 1)
                 {
                     AnnounceFile(fi, ref ann);
@@ -238,11 +241,10 @@ namespace FMPhotoFinish
                     }
                 }
 
-                if (DateFixup)
+                if (mdf.DetermineTimezone())
                 {
-                    // Fill in date taken if not present
-                    // Fill in timezone if not present
-
+                    AnnounceFile(fi, ref ann);
+                    OnProgressReport($"   Timezone {MediaFile.FormatTimeZone(mdf.Timezone)} from {mdf.TimezoneSource}.");
                 }
             }
         }

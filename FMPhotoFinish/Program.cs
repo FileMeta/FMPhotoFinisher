@@ -10,9 +10,9 @@ using System.Text;
  *  -orderednames
  *  -transcode audio
  *  -log
+ *  determine timezone
  * Next:
- *  preserve metadata on transcode
- *  -datefixup
+ *  preserve metadata on transcode and store updated metadata
  *  -sort
  *  -st
  *  -sDCF
@@ -108,15 +108,6 @@ Operations:
   -transcode       Transcode video and audio files to the preferred format
                    which is .mp4 for video and .m4a for audio. Also renames
                    .jpeg files to .jpg.
-
-  -datefixup       If the ""Date Taken"" field (JPEG images) or ""Media Created""
-                   field (MP4 and M4A video and audio files) is missing, fill
-                   it in with the best available information including the
-                   date created, date modifed, and dates from neighboring
-                   files in the selection. In particular, this is effective
-                   for filling in the date for video files when cameras don't
-                   supply that information. Also fills in timezone tag if it
-                   is not present.
 
 Other Options:
 
@@ -286,10 +277,6 @@ Other Options:
 
                         case "-autorot":
                             photoFinisher.AutoRotate = true;
-                            break;
-
-                        case "-datefixup":
-                            photoFinisher.DateFixup = true;
                             break;
 
                         case "-log":

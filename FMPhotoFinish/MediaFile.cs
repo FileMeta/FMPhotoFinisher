@@ -351,11 +351,6 @@ namespace FMPhotoFinish
         // Metatag values from Property System Keywords
         int? m_mtTimezone;
 
-        // Values from the ISOM container (.MOV, .MP4, and .M4A formats)
-        DateTime? m_isomCreationTime = null;
-        DateTime? m_isomModificationTime = null;
-        TimeSpan? m_isomDuration = null;
-
         // Values from ExifTool
         int? m_etTimezone;
 
@@ -411,22 +406,6 @@ namespace FMPhotoFinish
                         {
                             m_mtTimezone = timezone;
                         }
-                    }
-                }
-            }
-
-            // Load Isom Properties
-            // TODO: Verify that these are used.
-            if (s_isomExtensions.Contains(ext))
-            {
-                var isom = FileMeta.IsomCoreMetadata.TryOpen(filepath);
-                if (isom != null)
-                {
-                    using (isom)
-                    {
-                        m_isomCreationTime = isom.CreationTime;
-                        m_isomModificationTime = isom.ModificationTime;
-                        m_isomDuration = isom.Duration;
                     }
                 }
             }

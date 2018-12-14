@@ -70,11 +70,6 @@ namespace FMPhotoFinish
         /// </summary>
         public bool Transcode { get; set; }
 
-        /// <summary>
-        /// Clean up date/time taken metadata including determining timezone where possible.
-        /// </summary>
-        public bool DateFixup { get; set; }
-
         #endregion Operations
 
         /// <summary>

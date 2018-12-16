@@ -197,12 +197,12 @@ namespace ExifToolWrapper
             if (!int.TryParse(s.Substring(5, 2), out month)) return false;
             if (s[7] != ':') return false;
             if (!int.TryParse(s.Substring(8, 2), out day)) return false;
-            if (s[9] != ' ') return false;
-            if (!int.TryParse(s.Substring(10, 2), out hour)) return false;
-            if (s[11] != ':') return false;
-            if (!int.TryParse(s.Substring(12, 2), out minute)) return false;
-            if (s[14] != ':') return false;
-            if (!int.TryParse(s.Substring(15, 4), out second)) return false;
+            if (s[10] != ' ') return false;
+            if (!int.TryParse(s.Substring(11, 2), out hour)) return false;
+            if (s[13] != ':') return false;
+            if (!int.TryParse(s.Substring(14, 2), out minute)) return false;
+            if (s[16] != ':') return false;
+            if (!int.TryParse(s.Substring(17, 2), out second)) return false;
 
             if (year < 1900 || year > 2200) return false;
             if (month < 1 || month > 12) return false;

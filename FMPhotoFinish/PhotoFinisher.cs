@@ -215,7 +215,7 @@ namespace FMPhotoFinish
 
                 if (mdf.DeterimineCreationDate())
                 {
-                    OnProgressReport($"   Date {mdf.CreationDate.ToString("yyyy-MM-dd hh:mm:ss", CultureInfo.InvariantCulture)} ({mdf.CreationDate.Kind}) from {mdf.CreationDateSource}.");
+                    OnProgressReport($"   Date {mdf.CreationDate.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)} ({mdf.CreationDate.Kind}) from {mdf.CreationDateSource}.");
                 }
 
                 if (mdf.DetermineTimezone())

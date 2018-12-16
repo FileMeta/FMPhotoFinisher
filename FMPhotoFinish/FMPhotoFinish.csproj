@@ -50,6 +50,7 @@
     <Compile Include="ProcessFileInfo.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="TimeZoneTag.cs" />
     <Compile Include="WinShellPropertyStore.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

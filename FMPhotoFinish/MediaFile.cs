@@ -5,6 +5,7 @@ using System.IO;
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
+using FileMeta;
 
 namespace FMPhotoFinish
 {
@@ -111,45 +112,6 @@ namespace FMPhotoFinish
                 filepath = $"{basepath}({index}){extension}";
                 ++index;
             } while (File.Exists(filepath));
-        }
-
-        /// <summary>
-        /// Parses a timezone string into a signed integer representing the number of minutes offset from UTC.
-        /// </summary>
-        /// <param name="s">The timezone string to parse.</param>
-        /// <param name="result">The parsed timezone.</param>
-        /// <returns>True if successful, else false.</returns>
-        /// <remarks>Example timezone values: "-05:00" "-5", "+06:00", "+6", "+10:30".</remarks>
-        public static bool TryParseTimeZone(string s, out int result)
-        {
-            result = 0;
-            var parts = s.Split(':');
-            if (parts.Length < 1 || parts.Length > 2) return false;
-            int n;
-            if (!int.TryParse(parts[0], out n)) return false;
-            result = n * 60;
-            if (parts.Length > 1)
-            {
-                if (!int.TryParse(parts[1], out n)) return false;
-                if (s[0] == '-') n = -n;
-                result += n;
-            }
-            return true;
-        }
-
-        public static string FormatTimeZone(int minutes)
-        {
-            char sign;
-            if (minutes < 0)
-            {
-                sign = '-';
-                minutes = -minutes;
-            }
-            else
-            {
-                sign = '+';
-            }
-            return $"{sign}{minutes/60:d2}:{minutes%60:d2}";
         }
 
         /// <summary>
@@ -349,17 +311,17 @@ namespace FMPhotoFinish
         TimeSpan? m_psDuration;
 
         // Metatag values from Property System Keywords
-        int? m_mtTimezone;
+        TimeZoneTag m_mtTimezone;
 
         // Values from ExifTool
-        int? m_etTimezone;
+        TimeZoneTag m_etTimezone;
 
-        // Values that may come from any of several sources
+        // Master Values
+        bool updateMetadata = false; // Metadata should be updated upon disposal
+        DateTime? m_creationDate;
+        TimeZoneTag m_timezone;
         string m_make;
         string m_model;
-
-        // Values to be set
-        int? m_setTimezone;
 
         public MediaFile(string filepath, string originalFilename)
         {
@@ -399,10 +361,10 @@ namespace FMPhotoFinish
                     foreach(string s in keywords)
                     {
                         string key, value;
-                        int timezone;
+                        TimeZoneTag timezone;
                         if (TryParseMetatag(s, out key, out value)
                             && key.Equals(c_timezoneKey, StringComparison.OrdinalIgnoreCase)
-                            && TryParseTimeZone(value, out timezone))
+                            &&  TimeZoneTag.TryParse(value, out timezone))
                         {
                             m_mtTimezone = timezone;
                         }
@@ -424,8 +386,8 @@ namespace FMPhotoFinish
                     {
                         case "timezone":
                             {
-                                int tz;
-                                if (TryParseTimeZone(pair.Value, out tz))
+                                TimeZoneTag tz;
+                                if (TimeZoneTag.TryParse(pair.Value, out tz))
                                 {
                                     m_etTimezone = tz;
                                 }
@@ -467,12 +429,12 @@ namespace FMPhotoFinish
         public DateTime? OriginalDateModified { get; set; }
         public int Orientation { get; private set; }
 
-        public int Timezone
+        public TimeZoneTag Timezone
         {
-            get { return m_setTimezone ?? m_mtTimezone ?? m_etTimezone ?? 0; }
+            get { return m_timezone ?? m_mtTimezone ?? m_etTimezone ?? TimeZoneTag.Unknown; }
             set
             {
-                m_setTimezone = value;
+                m_timezone = value;
                 TimezoneSource = "Explicit";
             }
         }
@@ -534,17 +496,19 @@ namespace FMPhotoFinish
             // DateTime is not known so timezone is irrelevant
             if (!m_psItemDate.HasValue) return false;
 
-            if (m_mtTimezone.HasValue)
+            if (!TimeZoneTag.IsNullOrUnknown(m_mtTimezone))
             {
-                m_setTimezone = m_mtTimezone;
+                m_timezone = m_mtTimezone;
                 TimezoneSource = "Existing";
+                updateMetadata = true;
                 return true;
             }
 
-            if (m_etTimezone.HasValue)
+            if (!TimeZoneTag.IsNullOrUnknown(m_etTimezone))
             {
-                m_setTimezone = m_etTimezone;
+                m_timezone = m_etTimezone;
                 TimezoneSource = "MakerNote";
+                updateMetadata = true;
                 return true;
             }
 
@@ -560,8 +524,9 @@ namespace FMPhotoFinish
                 && TryParseDateTimeFromFilename(m_originalFilename, out dt)
                 && TryCalcTimezoneFromMatch(dt, out timezone))
             {
-                m_setTimezone = timezone;
+                m_timezone = new TimeZoneTag(timezone, TimeZoneKind.Normal);
                 TimezoneSource = "Filename";
+                updateMetadata = true;
                 return true;
             }
 
@@ -574,16 +539,18 @@ namespace FMPhotoFinish
                 if (TryCalcTimezoneFromMatch((OriginalDateCreated ?? m_fsDateCreated).ToLocalTime(), out timezone)
                     && timezone == 0)
                 {
-                    m_setTimezone = 0;
+                    m_timezone = TimeZoneTag.ForceLocal;
                     TimezoneSource = "FileSystem";
+                    updateMetadata = true;
                     return true;
                 }
 
                 if (TryCalcTimezoneFromMatch((OriginalDateModified ?? m_fsDateModified).ToLocalTime(), out timezone)
                     && timezone == 0)
                 {
-                    m_setTimezone = 0;
+                    m_timezone = TimeZoneTag.ForceLocal;
                     TimezoneSource = "FileSystem";
+                    updateMetadata = true;
                     return true;
                 }
             }

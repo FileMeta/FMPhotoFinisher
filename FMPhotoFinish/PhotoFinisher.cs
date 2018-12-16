@@ -239,7 +239,7 @@ namespace FMPhotoFinish
                 if (mdf.DetermineTimezone())
                 {
                     AnnounceFile(fi, ref ann);
-                    OnProgressReport($"   Timezone {MediaFile.FormatTimeZone(mdf.Timezone)} from {mdf.TimezoneSource}.");
+                    OnProgressReport($"   Timezone {mdf.Timezone} from {mdf.TimezoneSource}.");
                 }
             }
         }

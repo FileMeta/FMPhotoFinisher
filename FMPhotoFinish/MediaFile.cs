@@ -172,7 +172,7 @@ namespace FMPhotoFinish
         static long c_fractionalTolerance = (new TimeSpan(0, 0, 60)).Ticks;
         static long c_ticksThirtyMinutes = (new TimeSpan(0, 30, 0)).Ticks;
 
-        public bool TryGetTimezoneOffset(DateTime a, DateTime b, out int offset)
+        public static bool TryGetTimezoneOffset(DateTime a, DateTime b, out int offset)
         {
             offset = 0;
             TimeSpan ts = a.Subtract(b);
@@ -190,11 +190,6 @@ namespace FMPhotoFinish
 
             // Check whether the remainder exceeds the fractional tolerance
             if (Math.Abs(ts.Ticks - tsRounded.Ticks) > c_fractionalTolerance) return false;
-
-#if DEBUG
-            Debug.WriteLine($"   Offset: {tsRounded.TotalHours}");
-            Debug.WriteLine($"   Tolerance: {(new TimeSpan(ts.Ticks - tsRounded.Ticks)).TotalSeconds:F3}");
-#endif
 
             offset = (int)tsRounded.TotalMinutes;
             return true;
@@ -306,14 +301,19 @@ namespace FMPhotoFinish
         DateTime m_fsDateCreated;
         DateTime m_fsDateModified;
 
-        // Critical values from the Windows Property System
-        DateTime? m_psItemDate;
+        // Values from the Windows Property System
+        DateTime? m_psDateTaken;
+        DateTime? m_psDateEncoded;
         TimeSpan? m_psDuration;
 
         // Metatag values from Property System Keywords
         TimeZoneTag m_mtTimezone;
 
+        // Valies from IsomCoreMetadata
+        DateTime? m_isomCreationTime;
+
         // Values from ExifTool
+        DateTime? m_etDateTimeOriginal; // EXIF:DateTimeOriginal (.jpg, .jpeg) - RIFF:DateTimeOriginal (.avi) - in local time.
         TimeZoneTag m_etTimezone;
 
         // Master Values
@@ -339,20 +339,20 @@ namespace FMPhotoFinish
             using (var propstore = PropertyStore.Open(filepath, false))
             {
                 m_fsDateCreated = (DateTime)propstore.GetValue(PropertyKeys.DateCreated);
+                Debug.Assert(m_fsDateCreated.Kind == DateTimeKind.Utc);
                 m_fsDateModified = (DateTime)propstore.GetValue(PropertyKeys.DateModified);
-                m_psItemDate = (DateTime?)propstore.GetValue(PropertyKeys.DateTaken);
-                if (!m_psItemDate.HasValue)
-                    m_psItemDate = (DateTime?)propstore.GetValue(PropertyKeys.DateEncoded);
-
+                Debug.Assert(m_fsDateModified.Kind == DateTimeKind.Utc);
+                m_psDateTaken = (DateTime?)propstore.GetValue(PropertyKeys.DateTaken);
+                Debug.Assert(!m_psDateTaken.HasValue || m_psDateTaken.Value.Kind == DateTimeKind.Local);
+                m_psDateEncoded = (DateTime?)propstore.GetValue(PropertyKeys.DateEncoded);
                 {
                     var duration = propstore.GetValue(PropertyKeys.Duration);
                     if (duration != null)
                         m_psDuration = new TimeSpan((long)(ulong)duration);
                 }
                 Orientation = (int)(ushort)(propstore.GetValue(PropertyKeys.Orientation) ?? (ushort)1);
-
-                // Todo: Add Make and Model here
-
+                m_make = (string)propstore.GetValue(PropertyKeys.Make);
+                m_model = (string)propstore.GetValue(PropertyKeys.Model);
 
                 // Keywords may be used to store custom metadata
                 var keywords = (string[])propstore.GetValue(PropertyKeys.Keywords);
@@ -372,6 +372,20 @@ namespace FMPhotoFinish
                 }
             }
 
+            // Load Isom Property
+            if (s_isomExtensions.Contains(ext))
+            {
+                var isom = FileMeta.IsomCoreMetadata.TryOpen(filepath);
+                if (isom != null)
+                {
+                    using (isom)
+                    {
+                        m_isomCreationTime = isom.CreationTime;
+                        Debug.Assert(!m_isomCreationTime.HasValue || m_isomCreationTime.Value.Kind == DateTimeKind.Utc);
+                    }
+                }
+            }
+
             // Load ExifTool Properties
             {
                 var exifProperties = new List<KeyValuePair<string, string>>();
@@ -384,6 +398,14 @@ namespace FMPhotoFinish
                     string key = (colon >= 0) ? pair.Key.Substring(colon + 1) : pair.Key;
                     switch (key.ToLowerInvariant())
                     {
+                        case "datetimeoriginal": // EXIF from JPEG and Canon .mp4 files - in local time
+                            {
+                                Debug.Assert(pair.Key.Equals("ExifIFD:DateTimeOriginal") || pair.Key.Equals("RIFF:DateTimeOriginal"));
+                                DateTime dt;
+                                if (ExifToolWrapper.ExifTool.TryParseDate(pair.Value, DateTimeKind.Local, out dt)) m_etDateTimeOriginal = dt;
+                            }
+                            break;
+
                         case "timezone":
                             {
                                 TimeZoneTag tz;
@@ -429,6 +451,18 @@ namespace FMPhotoFinish
         public DateTime? OriginalDateModified { get; set; }
         public int Orientation { get; private set; }
 
+        public DateTime CreationDate
+        {
+            get { return m_creationDate ?? m_psDateTaken ?? m_psDateEncoded ?? m_isomCreationTime ?? m_etDateTimeOriginal ?? m_fsDateCreated; }
+            set
+            {
+                m_creationDate = value;
+                CreationDateSource = "Explicit";
+            }
+        }
+
+        public string CreationDateSource { get; private set; }
+
         public TimeZoneTag Timezone
         {
             get { return m_timezone ?? m_mtTimezone ?? m_etTimezone ?? TimeZoneTag.Unknown; }
@@ -440,7 +474,167 @@ namespace FMPhotoFinish
         }
 
         public string TimezoneSource { get; private set; }
-        
+
+        /// <summary>
+        /// Attempt to determine the date of media files - that is, the date that the event
+        /// was recorded. This is the DateTimeOriginal from JPEG EXIF and the creation_date
+        /// from .MOV and .MP4 files.
+        /// </summary>
+        /// <returns>True if the date was successfully determined. Otherwise false.</returns>
+        public bool DeterimineCreationDate()
+        {
+            // We have lots of dates to work from, take them in priority order
+            // Note that the reason they are named inconsistently is to match, as closely as reasonable, to the
+            // field names in the originating specificaitons or sources.
+            if (m_creationDate.HasValue) return true; // Already determined
+            if (m_psDateTaken.HasValue)
+            {
+                m_creationDate = m_psDateTaken;
+                CreationDateSource = "Photo.DateTaken";
+                // Not necessary to update metadata because this is a primary source
+                return true;
+            }
+            if (m_psDateEncoded.HasValue)
+            {
+                m_creationDate = m_psDateEncoded;
+                CreationDateSource = "Media.DateEncoded";
+                // Not necessary to update metadata because this is a primary source
+                return true;
+            }
+            if (m_isomCreationTime.HasValue)
+            {
+                m_creationDate = m_isomCreationTime;
+                CreationDateSource = "Isom.CreationTime";
+                updateMetadata = true;
+                return true;
+            }
+            if (m_etDateTimeOriginal.HasValue)
+            {
+                m_creationDate = m_etDateTimeOriginal;
+                CreationDateSource = "Exif.DateTimeOriginal";
+                updateMetadata = true;
+                return true;
+            }
+            // From file naming convention
+            {
+                DateTime dt;
+                if (TryParseDateTimeFromFilename(m_originalFilename, out dt))
+                {
+                    m_creationDate = dt;
+                    CreationDateSource = "Filename";
+                    updateMetadata = true;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Attempt to determine the timezone of media files - especially those
+        /// with UTC metadata. (See remarks for detail.) 
+        /// </summary>
+        /// <remarks>
+        /// <para>Video and audio files in ISOM-derived formats (.mov, .mp4, .m4a, etc.) and
+        /// video in .avi format store the date/time of the event in UTC. Meanwhile, photos
+        /// in .jpg store the event date/time in local time. In order to render the times
+        /// of mixed video and photo content consistently we need to know the timezone of the
+        /// UTC items. Knowing the timezone of .jpg (local time) items is nice but not as
+        /// important.
+        /// </para>
+        /// <para>This method attempts to determine the timezone through various methods and
+        /// stores it in the custom &datetime metatag. Some of the methods it uses only work
+        /// for formats with DateTime in UTC - which is convenient since that's the more
+        /// important case.
+        /// </para>
+        /// <para>For cameras without a timezone setting, a local time is often stored in
+        /// a UTC field. In that case, the timezone is set to "+00:00".
+        /// </para>
+        /// </remarks>
+        public bool DetermineTimezone()
+        {
+            // DateTime is not known so timezone is irrelevant
+            if (!m_creationDate.HasValue) return false;
+
+            // Value has already been determined
+            if (m_timezone != null) return true;
+
+            if (!TimeZoneTag.IsNullOrUnknown(m_mtTimezone))
+            {
+                m_timezone = m_mtTimezone;
+                TimezoneSource = "MetaTag";
+                // Not necessary to update metadata because this is the primary source
+                return true;
+            }
+
+            if (!TimeZoneTag.IsNullOrUnknown(m_etTimezone))
+            {
+                m_timezone = m_etTimezone;
+                TimezoneSource = "MakerNote";
+                updateMetadata = true;
+                return true;
+            }
+
+            /* Video and audio files in ISOM format may have the time stored in the ISOM header
+             * field in UTC and in an EXIF field in local time. If so, we can determine the
+             * timezone by comparing the two.
+             * If the offset is zero then we cannot tell whether timezone is GMT (Britain) or
+             * if the camera doesn't have timezone information so we assume the latter because
+             * it's more likely. */
+            int tzMinutes;
+            if (m_isomCreationTime.HasValue && m_etDateTimeOriginal.HasValue
+                && TryCalcTimezoneFromMatch(m_isomCreationTime.Value, m_etDateTimeOriginal.Value, m_psDuration, out tzMinutes))
+            {
+                m_timezone = new TimeZoneTag(tzMinutes, tzMinutes == 0 ? TimeZoneKind.ForceLocal : TimeZoneKind.Normal);
+                TimezoneSource = "IsomVsExif";
+                updateMetadata = true;
+                return true;
+            }
+
+            /* Phones often name the file according to the local date and time it was taken.
+             * This can be compared with available Utc time data isomCreationTime to discover
+             * the timezone. */
+            DateTime dt;
+            if (m_isomCreationTime.HasValue
+                && TryParseDateTimeFromFilename(m_originalFilename, out dt)
+                && TryCalcTimezoneFromMatch(m_isomCreationTime.Value, dt, m_psDuration, out tzMinutes))
+            {
+                m_timezone = new TimeZoneTag(tzMinutes, tzMinutes == 0 ? TimeZoneKind.ForceLocal : TimeZoneKind.Normal);
+                TimezoneSource = "Filename";
+                updateMetadata = true;
+                return true;
+            }
+
+            /* Compare with the file system timestamp in local time. If the media is being read
+             * from FAT (which stores in local time) then a zero offset means the camera uses
+             * local time in the UTC field. Values other than zero are not trustworthy because
+             * the timezone on the computer may have been changed.
+             */
+            if (m_isomCreationTime.HasValue)
+            {
+                if (TryCalcTimezoneFromMatch(m_isomCreationTime.Value,
+                    (OriginalDateCreated ?? m_fsDateCreated).ToLocalTime(), m_psDuration, out tzMinutes)
+                    && tzMinutes == 0)
+                {
+                    m_timezone = TimeZoneTag.ForceLocal;
+                    TimezoneSource = "FileSystem";
+                    updateMetadata = true;
+                    return true;
+                }
+
+                if (TryCalcTimezoneFromMatch(m_isomCreationTime.Value,
+                    (OriginalDateModified ?? m_fsDateModified).ToLocalTime(), m_psDuration, out tzMinutes)
+                    && tzMinutes == 0)
+                {
+                    m_timezone = TimeZoneTag.ForceLocal;
+                    TimezoneSource = "FileSystem";
+                    updateMetadata = true;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         public void RotateToVertical()
         {
             JpegRotator.RotateToVertical(m_filepath);
@@ -469,95 +663,6 @@ namespace FMPhotoFinish
 
             return Transcode(reporter);
         }
-
-        /// <summary>
-        /// Attempt to determine the timezone of media files - especially those
-        /// with UTC metadata. (See remarks for detail.) 
-        /// </summary>
-        /// <remarks>
-        /// <para>Video and audio files in ISOM-derived formats (.mov, .mp4, .m4a, etc.) and
-        /// video in .avi format store the date/time of the event in UTC. Meanwhile, photos
-        /// in .jpg store the event date/time in local time. In order to render the times
-        /// of mixed video and photo content consistently we need to know the timezone of the
-        /// UTC items. Knowing the timezone of .jpg (local time) items is nice but not as
-        /// important.
-        /// </para>
-        /// <para>This method attempts to determine the timezone through various methods and
-        /// stores it in the custom &datetime metatag. Some of the methods it uses only work
-        /// for formats with DateTime in UTC - which is convenient since that's the more
-        /// important case.
-        /// </para>
-        /// <para>For cameras without a timezone setting, a local time is often stored in
-        /// a UTC field. In that case, the timezone is set to "+00:00".
-        /// </para>
-        /// </remarks>
-        public bool DetermineTimezone()
-        {
-            // DateTime is not known so timezone is irrelevant
-            if (!m_psItemDate.HasValue) return false;
-
-            if (!TimeZoneTag.IsNullOrUnknown(m_mtTimezone))
-            {
-                m_timezone = m_mtTimezone;
-                TimezoneSource = "Existing";
-                updateMetadata = true;
-                return true;
-            }
-
-            if (!TimeZoneTag.IsNullOrUnknown(m_etTimezone))
-            {
-                m_timezone = m_etTimezone;
-                TimezoneSource = "MakerNote";
-                updateMetadata = true;
-                return true;
-            }
-
-            /* Video or audio files from phones generally store the ItemTime in UTC, but they
-             * name the file according to local time. So, we can detect the timezone
-             * by comparing the ItemTime against the date/time parsed from the filename.
-             * Photos from phones use the same naming convention but store local time so
-             * the calculation should result in a zero offset. It means we can't determine
-             * the timezone for photos but we have the local time which is more important.*/
-            int timezone;
-            DateTime dt;
-            if (m_psItemDate.Value.Kind == DateTimeKind.Utc
-                && TryParseDateTimeFromFilename(m_originalFilename, out dt)
-                && TryCalcTimezoneFromMatch(dt, out timezone))
-            {
-                m_timezone = new TimeZoneTag(timezone, TimeZoneKind.Normal);
-                TimezoneSource = "Filename";
-                updateMetadata = true;
-                return true;
-            }
-
-            /* Compare with the file system timestamp in local time. If the media is being read
-             * from FAT (which stores in local time) then a zero offset means the camera uses
-             * local time in the UTC field.
-             */
-            if (m_psItemDate.Value.Kind == DateTimeKind.Utc)
-            {
-                if (TryCalcTimezoneFromMatch((OriginalDateCreated ?? m_fsDateCreated).ToLocalTime(), out timezone)
-                    && timezone == 0)
-                {
-                    m_timezone = TimeZoneTag.ForceLocal;
-                    TimezoneSource = "FileSystem";
-                    updateMetadata = true;
-                    return true;
-                }
-
-                if (TryCalcTimezoneFromMatch((OriginalDateModified ?? m_fsDateModified).ToLocalTime(), out timezone)
-                    && timezone == 0)
-                {
-                    m_timezone = TimeZoneTag.ForceLocal;
-                    TimezoneSource = "FileSystem";
-                    updateMetadata = true;
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
 
 
         #region IDisposable Support
@@ -752,22 +857,21 @@ namespace FMPhotoFinish
             return result;
         }
 
-        bool TryCalcTimezoneFromMatch(DateTime timeToMatch, out int timezone)
+        static bool TryCalcTimezoneFromMatch(DateTime utcDate, DateTime localDate, TimeSpan? duration, out int timezone)
         {
-            Debug.Assert(m_psItemDate.HasValue); // Caller should check for value first.
-            Debug.Assert(m_psItemDate.Value.Kind == DateTimeKind.Local
-                || m_psItemDate.Value.Kind == DateTimeKind.Utc);
+            Debug.Assert(utcDate.Kind == DateTimeKind.Utc);
+            Debug.Assert(localDate.Kind == DateTimeKind.Local);
 
             // Check if the match time is offset by a whole number of hours (given the tolerance of TryGetHourOffset)
-            if (TryGetTimezoneOffset(m_psItemDate.Value, timeToMatch, out timezone)) return true;
+            if (TryGetTimezoneOffset(localDate, utcDate, out timezone)) return true;
 
             // If the media has a duration, compare against both the start and end.
             // Certain timestamp events correspond to one or the other and without
             // incorporating duration, the tolerance might not be satisfied.
-            if (m_psDuration.HasValue)
+            if (duration.HasValue)
             {
-                if (TryGetTimezoneOffset(m_psItemDate.Value.Add(m_psDuration.Value), timeToMatch, out timezone)) return true;
-                if (TryGetTimezoneOffset(m_psItemDate.Value.Subtract(m_psDuration.Value), timeToMatch, out timezone)) return true;
+                if (TryGetTimezoneOffset(localDate, utcDate.Add(duration.Value), out timezone)) return true;
+                if (TryGetTimezoneOffset(localDate, utcDate.Subtract(duration.Value), out timezone)) return true;
             }
             return false;
         }

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Globalization;
 
 namespace FMPhotoFinish
 {
@@ -173,7 +174,7 @@ namespace FMPhotoFinish
 
         void ProcessMediaFile(ProcessFileInfo fi, int index)
         {
-            bool ann = false;
+            OnProgressReport(Path.GetFileName(fi.Filepath));
 
             if (SetOrderedNames)
             {
@@ -190,8 +191,6 @@ namespace FMPhotoFinish
 
                 if (changeFrom != null)
                 {
-                    AnnounceFile(fi, ref ann);
-
                     // Use the original filepath as the starting point unless, for some reason, the prefix is different.
                     fn = Path.GetFileName(fi.OriginalFilepath);
                     if (!fn.StartsWith(changeFrom, StringComparison.OrdinalIgnoreCase)) // Paranoid code
@@ -214,16 +213,24 @@ namespace FMPhotoFinish
                 mdf.OriginalDateCreated = fi.OriginalDateCreated;
                 mdf.OriginalDateModified = fi.OriginalDateModified;
 
+                if (mdf.DeterimineCreationDate())
+                {
+                    OnProgressReport($"   Date {mdf.CreationDate.ToString("yyyy-MM-dd hh:mm:ss", CultureInfo.InvariantCulture)} ({mdf.CreationDate.Kind}) from {mdf.CreationDateSource}.");
+                }
+
+                if (mdf.DetermineTimezone())
+                {
+                    OnProgressReport($"   Timezone {mdf.Timezone} from {mdf.TimezoneSource}.");
+                }
+
                 if (AutoRotate && mdf.Orientation != 1)
                 {
-                    AnnounceFile(fi, ref ann);
                     OnProgressReport("   Autorotate");
                     mdf.RotateToVertical();
                 }
 
                 if (Transcode && !mdf.IsPreferredFormat)
                 {
-                    AnnounceFile(fi, ref ann);
                     OnProgressReport($"   Transcode to {mdf.PreferredFormat}");
                     if (mdf.TranscodeToPreferredFormat(msg => OnStatusReport(msg)))
                     {
@@ -235,21 +242,6 @@ namespace FMPhotoFinish
                         OnProgressReport("      Transcode failed; original format retained.");
                     }
                 }
-
-                if (mdf.DetermineTimezone())
-                {
-                    AnnounceFile(fi, ref ann);
-                    OnProgressReport($"   Timezone {mdf.Timezone} from {mdf.TimezoneSource}.");
-                }
-            }
-        }
-
-        void AnnounceFile(ProcessFileInfo fi, ref bool announced)
-        {
-            if (!announced)
-            {
-                OnProgressReport(Path.GetFileName(fi.Filepath));
-                announced = true;
             }
         }
 

@@ -632,6 +632,15 @@ namespace FMPhotoFinish
                 }
             }
 
+            /* If the creationDate determined earlier is in local timezone then set it to ForceLocal
+             */
+            if (m_creationDate.HasValue && m_creationDate.Value.Kind == DateTimeKind.Local)
+            {
+                m_timezone = TimeZoneTag.ForceLocal;
+                TimezoneSource = "LocalDate";
+                return true;
+            }
+
             return false;
         }
 

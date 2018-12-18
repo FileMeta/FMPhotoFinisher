@@ -65,6 +65,15 @@ namespace FMPhotoFinish
             c_m4aExt  // Audio
         };
 
+        // Renaming patterns to make sure that image names appear in the order they were taken
+        static readonly RenamePattern[] s_renamePatterns = new RenamePattern[]
+        {
+            new RenamePattern(@"^MVI_(\d{4}).AVI$", @"IMG_$1.AVI"), // Older Canon Cameras
+            new RenamePattern(@"^SND_(\d{4}).WAV$", @"IMG_$1.WAV"), // Older Canon Cameras with Voice Annotation Feature
+            new RenamePattern(@"^MVI_(\d{4}).MP4$", @"IMG_$1.MP4"), // Newer Canon Cameras
+            new RenamePattern(@"^VID_(\d{8}_\d{6,9}).(mp4|MP4)$", @"IMG_$1.$2") // Android Phones
+        };
+
         public static MediaType GetMediaType(string filenameOrExtension)
         {
             int ext = filenameOrExtension.LastIndexOf('.');
@@ -382,6 +391,36 @@ namespace FMPhotoFinish
         }
 
         public string TimezoneSource { get; private set; }
+
+        /// <summary>
+        /// Change the filename, if necessary, so that video and audio files are listed in-order
+        /// with photos,
+        /// </summary>
+        /// <returns>True if a rename was necessary. Else, false.</returns>
+        /// <remarks>
+        /// <para>Some cameras use different filename prefixes for video files vs. photos. When
+        /// playing back in filename order, this results in videos being shown out-of-order from
+        /// the photos. This method renames files according to certain patterns to ensure that
+        /// all are shown in the expected order.
+        /// </para>
+        /// </remarks>
+        public bool SetOrderedName()
+        {
+            string newName;
+            if (RenamePattern.TryGetNewName(s_renamePatterns, m_originalFilename, out newName))
+            {
+                // Create the new path and make it unique
+                string newPath = Path.Combine(Path.GetDirectoryName(m_filepath), newName);
+                MakeFilepathUnique(ref newPath);
+
+                // Rename
+                File.Move(m_filepath, newPath);
+                m_filepath = newPath;
+                return true;
+            }
+
+            return false;
+        }
 
         /// <summary>
         /// Attempt to determine the date of media files - that is, the date that the event
@@ -905,6 +944,50 @@ namespace FMPhotoFinish
         public static PROPERTYKEY Duration = new PROPERTYKEY("64440490-4C8B-11D1-8B70-080036B11A03", 3);
         public static PROPERTYKEY Make = new PROPERTYKEY("14b81da1-0135-4d31-96d9-6cbfc9671a99", 271); // System.Photo.CameraManufacturer
         public static PROPERTYKEY Model = new PROPERTYKEY("14b81da1-0135-4d31-96d9-6cbfc9671a99", 272); // System.Photo.CameraModel
+    }
+
+    /// <summary>
+    /// A pattern to be used when renaming files so that media gets presented
+    /// in the order that they were taken. Generally this is done to interleave
+    /// photos and video when they use different prefixes.
+    /// </summary>
+    class RenamePattern
+    {
+        Regex m_rx;
+        string m_replacement;
+
+        /// <summary>
+        /// Construct a RenamePattern
+        /// </summary>
+        /// <param name="regex">The Regex pattern to match.</param>
+        /// <param name="replacement">The replacement pattern.</param>
+        public RenamePattern(string regex, string replacement)
+        {
+            m_rx = new Regex(regex, RegexOptions.Singleline | RegexOptions.CultureInvariant);
+            m_replacement = replacement;
+        }
+
+        /// <summary>
+        /// If the pattern matches, get the new name for the file.
+        /// </summary>
+        /// <param name="filename">A filename to match to the pattern.</param>
+        /// <param name="newName">The new name to set.</param>
+        /// <returns></returns>
+        public bool TryGetNewName(string filename, out string newName)
+        {
+            newName = m_rx.Replace(filename, m_replacement, 1);
+            return !string.Equals(filename, newName, StringComparison.Ordinal);
+        }
+
+        static public bool TryGetNewName(IEnumerable<RenamePattern> list, string filename, out string newName)
+        {
+            foreach (var pattern in list)
+            {
+                if (pattern.TryGetNewName(filename, out newName)) return true;
+            }
+            newName = filename;
+            return false;
+        }
     }
 
 }

@@ -172,46 +172,53 @@ namespace FMPhotoFinish
         {
             OnProgressReport(Path.GetFileName(fi.Filepath));
 
-            using (var mdf = new MediaFile(fi.Filepath, Path.GetFileName(fi.OriginalFilepath)))
+            try
             {
-                mdf.OriginalDateCreated = fi.OriginalDateCreated;
-                mdf.OriginalDateModified = fi.OriginalDateModified;
-
-                if (SetOrderedNames && mdf.SetOrderedName())
+                using (var mdf = new MediaFile(fi.Filepath, Path.GetFileName(fi.OriginalFilepath)))
                 {
-                    fi.Filepath = mdf.Filepath;
-                    OnProgressReport("   Rename to: " + Path.GetFileName(mdf.Filepath));
-                }
+                    mdf.OriginalDateCreated = fi.OriginalDateCreated;
+                    mdf.OriginalDateModified = fi.OriginalDateModified;
 
-                if (mdf.DeterimineCreationDate())
-                {
-                    OnProgressReport($"   Date {mdf.CreationDate.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)} ({mdf.CreationDate.Kind}) from {mdf.CreationDateSource}.");
-                }
-
-                if (mdf.DetermineTimezone())
-                {
-                    OnProgressReport($"   Timezone {mdf.Timezone} from {mdf.TimezoneSource}.");
-                }
-
-                if (AutoRotate && mdf.Orientation != 1)
-                {
-                    OnProgressReport("   Autorotate");
-                    mdf.RotateToVertical();
-                }
-
-                if (Transcode && !mdf.IsPreferredFormat)
-                {
-                    OnProgressReport($"   Transcode to {mdf.PreferredFormat}");
-                    if (mdf.TranscodeToPreferredFormat(msg => OnStatusReport(msg)))
+                    if (SetOrderedNames && mdf.SetOrderedName())
                     {
                         fi.Filepath = mdf.Filepath;
-                        OnProgressReport($"      Transcoded to: {Path.GetFileName(mdf.Filepath)}");
+                        OnProgressReport("   Rename to: " + Path.GetFileName(mdf.Filepath));
                     }
-                    else
+
+                    if (mdf.DeterimineCreationDate())
                     {
-                        OnProgressReport("      Transcode failed; original format retained.");
+                        OnProgressReport($"   Date {mdf.CreationDate.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)} ({mdf.CreationDate.Kind}) from {mdf.CreationDateSource}.");
+                    }
+
+                    if (mdf.DetermineTimezone())
+                    {
+                        OnProgressReport($"   Timezone {mdf.Timezone} from {mdf.TimezoneSource}.");
+                    }
+
+                    if (AutoRotate && mdf.Orientation != 1)
+                    {
+                        OnProgressReport("   Autorotate");
+                        mdf.RotateToVertical();
+                    }
+
+                    if (Transcode && !mdf.IsPreferredFormat)
+                    {
+                        OnProgressReport($"   Transcode to {mdf.PreferredFormat}");
+                        if (mdf.TranscodeToPreferredFormat(msg => OnStatusReport(msg)))
+                        {
+                            fi.Filepath = mdf.Filepath;
+                            OnProgressReport($"      Transcoded to: {Path.GetFileName(mdf.Filepath)}");
+                        }
+                        else
+                        {
+                            OnProgressReport("      Transcode failed; original format retained.");
+                        }
                     }
                 }
+            }
+            catch (Exception err)
+            {
+                OnProgressReport($"   Error: {err.Message}");
             }
         }
 

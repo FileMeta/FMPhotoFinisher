@@ -655,83 +655,90 @@ namespace FMPhotoFinish
         {
             if (m_filepath == null) return;
 
-            if (disposing)
+            try
             {
-                if (m_updateMetadata)
+                if (disposing)
                 {
-                    if (m_mediaType == MediaType.Unsupported)
-                        throw new ApplicationException("Cannot update metadata on unsupported media type.");
-
-                    // If audio or video, attempt to use Isom to update creationDate
-                    bool creationDateStoredByIsom = false;
-                    if (m_creationDate.HasValue && (m_mediaType == MediaType.Video || m_mediaType == MediaType.Audio))
+                    if (m_updateMetadata)
                     {
-                        var isom = IsomCoreMetadata.TryOpen(m_filepath, true);
-                        if (isom != null)
+                        if (m_mediaType == MediaType.Unsupported)
+                            throw new ApplicationException("Cannot update metadata on unsupported media type.");
+
+                        // If audio or video, attempt to use Isom to update creationDate
+                        bool creationDateStoredByIsom = false;
+                        if (m_creationDate.HasValue && (m_mediaType == MediaType.Video || m_mediaType == MediaType.Audio))
                         {
-                            using (isom)
+                            var isom = IsomCoreMetadata.TryOpen(m_filepath, true);
+                            if (isom != null)
                             {
-                                // Convert to UTC (this does nothing if it is already UTC.
-                                var dt = (m_timezone != null) ? m_timezone.ToUtc(m_creationDate.Value) : m_creationDate.Value.ToUniversalTime();
-                                isom.CreationTime = dt;
-                                isom.ModificationTime = dt;
-                                isom.Commit();
-                            }
-                            creationDateStoredByIsom = true;
-                        }
-                    }
-
-                    using (var ps = PropertyStore.Open(m_filepath, true))
-                    {
-                        // Prep the metatags with existing values
-                        var metaTagSet = new MetaTagSet();
-                        metaTagSet.LoadKeywords((string[])ps.GetValue(PropertyKeys.Keywords));
-
-                        // Handle type-specific metadata
-                        if (m_mediaType == MediaType.Image)
-                        {
-
-                            if (m_creationDate.HasValue && !creationDateStoredByIsom)
-                            {
-                                // Convert to local (this does nothing if it is already Local.
-                                var dt = (m_timezone != null) ? m_timezone.ToLocal(m_creationDate.Value) : m_creationDate.Value.ToLocalTime();
-                                ps.SetValue(PropertyKeys.DateTaken, dt);
+                                using (isom)
+                                {
+                                    // Convert to UTC (this does nothing if it is already UTC.
+                                    var dt = (m_timezone != null) ? m_timezone.ToUtc(m_creationDate.Value) : m_creationDate.Value.ToUniversalTime();
+                                    isom.CreationTime = dt;
+                                    isom.ModificationTime = dt;
+                                    isom.Commit();
+                                }
+                                creationDateStoredByIsom = true;
                             }
                         }
 
-                        // Audio and video both use Isom file format (.mp4 and .m4a)
-                        else
+                        using (var ps = PropertyStore.Open(m_filepath, true))
                         {
-                            if (m_creationDate.HasValue && !creationDateStoredByIsom)
+                            // Prep the metatags with existing values
+                            var metaTagSet = new MetaTagSet();
+                            metaTagSet.LoadKeywords((string[])ps.GetValue(PropertyKeys.Keywords));
+
+                            // Handle type-specific metadata
+                            if (m_mediaType == MediaType.Image)
                             {
-                                // Convert to UTC (this does nothing if it is already UTC.
-                                var dt = (m_timezone != null) ? m_timezone.ToUtc(m_creationDate.Value) : m_creationDate.Value.ToUniversalTime();
-                                ps.SetValue(PropertyKeys.DateEncoded, dt);
+
+                                if (m_creationDate.HasValue && !creationDateStoredByIsom)
+                                {
+                                    // Convert to local (this does nothing if it is already Local.
+                                    var dt = (m_timezone != null) ? m_timezone.ToLocal(m_creationDate.Value) : m_creationDate.Value.ToLocalTime();
+                                    ps.SetValue(PropertyKeys.DateTaken, dt);
+                                }
                             }
+
+                            // Audio and video both use Isom file format (.mp4 and .m4a)
+                            else
+                            {
+                                if (m_creationDate.HasValue && !creationDateStoredByIsom)
+                                {
+                                    // Convert to UTC (this does nothing if it is already UTC.
+                                    var dt = (m_timezone != null) ? m_timezone.ToUtc(m_creationDate.Value) : m_creationDate.Value.ToUniversalTime();
+                                    ps.SetValue(PropertyKeys.DateEncoded, dt);
+                                }
+                            }
+
+                            if (m_timezone != null)
+                                metaTagSet.MetaTags[c_timezoneKey] = m_timezone.ToString();
+                            if (!string.IsNullOrEmpty(m_make))
+                                ps.SetValue(PropertyKeys.Make, m_make);
+                            if (!string.IsNullOrEmpty(m_model))
+                                ps.SetValue(PropertyKeys.Model, m_model);
+
+                            // Original filename. If the metatag value exists, it's an historical original
+                            // filename from a previous run of this or some other app. If it doesn't exist
+                            // then we use the value from the beginning of this job.
+                            metaTagSet.MetaTags[c_originalFilenameKey] = m_mtOriginalFilename ?? m_originalFilename;
+
+                            ps.SetValue(PropertyKeys.Keywords, metaTagSet.ToKeywords());
+
+                            ps.Commit();
                         }
-
-                        if (m_timezone != null)
-                            metaTagSet.MetaTags[c_timezoneKey] = m_timezone.ToString();
-                        if (!string.IsNullOrEmpty(m_make))
-                            ps.SetValue(PropertyKeys.Make, m_make);
-                        if (!string.IsNullOrEmpty(m_model))
-                            ps.SetValue(PropertyKeys.Model, m_model);
-
-                        // Original filename. If the metatag value exists, it's an historical original
-                        // filename from a previous run of this or some other app. If it doesn't exist
-                        // then we use the value from the beginning of this job.
-                        metaTagSet.MetaTags[c_originalFilenameKey] = m_mtOriginalFilename ?? m_originalFilename;
-
-                        ps.SetValue(PropertyKeys.Keywords, metaTagSet.ToKeywords());
-
-                        ps.Commit();
                     }
                 }
-            }
 
-            else
+                else
+                {
+                    System.Diagnostics.Debug.Fail("Failed to dispose of MediaFile.");
+                }
+            }
+            finally
             {
-                System.Diagnostics.Debug.Fail("Failed to dispose of MediaFile.");
+                m_filepath = null;
             }
         }
 

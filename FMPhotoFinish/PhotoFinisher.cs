@@ -17,11 +17,6 @@ namespace FMPhotoFinish
             new RenamePattern(@"^VID_(\d{8}_\d{6,9}).(mp4|MP4)$", @"IMG_$1.$2") // Android Phones
         };
 
-        // Other camera brands may eventually make this a list of name mappings rather than just one
-        const string c_changeFromPrefix1 = "MVI_";
-        const string c_changeFromPrefix2 = "SND_";
-        const string c_changeToPrefix = "IMG_";
-
         // Selected Files
         List<ProcessFileInfo> m_selectedFiles = new List<ProcessFileInfo>();
         HashSet<string> m_selectedFilesHash = new HashSet<string>();

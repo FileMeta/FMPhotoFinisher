@@ -2,11 +2,21 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace FMPhotoFinish
 {
     class PhotoFinisher
     {
+        // Renaming patterns to make sure that image names appear in the order they were taken
+        static readonly RenamePattern[] s_renamePatterns = new RenamePattern[]
+        {
+            new RenamePattern(@"^MVI_(\d{4}).AVI$", @"IMG_$1.AVI"), // Older Canon Cameras
+            new RenamePattern(@"^SND_(\d{4}).WAV$", @"IMG_$1.WAV"), // Older Canon Cameras with Voice Annotation Feature
+            new RenamePattern(@"^MVI_(\d{4}).MP4$", @"IMG_$1.MP4"), // Newer Canon Cameras
+            new RenamePattern(@"^VID_(\d{8}_\d{6,9}).(mp4|MP4)$", @"IMG_$1.$2") // Android Phones
+        };
+
         // Other camera brands may eventually make this a list of name mappings rather than just one
         const string c_changeFromPrefix1 = "MVI_";
         const string c_changeFromPrefix2 = "SND_";
@@ -178,27 +188,11 @@ namespace FMPhotoFinish
 
             if (SetOrderedNames)
             {
-                string fn = Path.GetFileName(fi.Filepath);
-                string changeFrom = null;
-                if (fn.StartsWith(c_changeFromPrefix1, StringComparison.OrdinalIgnoreCase))
+                string newName;
+                if (RenamePattern.TryGetNewName(s_renamePatterns, Path.GetFileName(fi.OriginalFilepath), out newName))
                 {
-                    changeFrom = c_changeFromPrefix1;
-                }
-                else if (fn.StartsWith(c_changeFromPrefix2, StringComparison.OrdinalIgnoreCase))
-                {
-                    changeFrom = c_changeFromPrefix2;
-                }
-
-                if (changeFrom != null)
-                {
-                    // Use the original filepath as the starting point unless, for some reason, the prefix is different.
-                    fn = Path.GetFileName(fi.OriginalFilepath);
-                    if (!fn.StartsWith(changeFrom, StringComparison.OrdinalIgnoreCase)) // Paranoid code
-                        fn = Path.GetFileName(fi.Filepath);
-
                     // Create the new path and make it unique
-                    string newPath = Path.Combine(Path.GetDirectoryName(fi.Filepath),
-                        string.Concat(c_changeToPrefix, fn.Substring(changeFrom.Length)));
+                    string newPath = Path.Combine(Path.GetDirectoryName(fi.Filepath), newName);
                     MediaFile.MakeFilepathUnique(ref newPath);
 
                     // Rename
@@ -324,5 +318,49 @@ namespace FMPhotoFinish
         }
 
         public string Message { get; private set; }
+    }
+
+    /// <summary>
+    /// A pattern to be used when renaming files so that media gets presented
+    /// in the order that they were taken. Generally this is done to interleave
+    /// photos and video when they use different prefixes.
+    /// </summary>
+    class RenamePattern
+    {
+        Regex m_rx;
+        string m_replacement;
+
+        /// <summary>
+        /// Construct a RenamePattern
+        /// </summary>
+        /// <param name="regex">The Regex pattern to match.</param>
+        /// <param name="replacement">The replacement pattern.</param>
+        public RenamePattern(string regex, string replacement)
+        {
+            m_rx = new Regex(regex, RegexOptions.Singleline | RegexOptions.CultureInvariant);
+            m_replacement = replacement;
+        }
+
+        /// <summary>
+        /// If the pattern matches, get the new name for the file.
+        /// </summary>
+        /// <param name="filename">A filename to match to the pattern.</param>
+        /// <param name="newName">The new name to set.</param>
+        /// <returns></returns>
+        public bool TryGetNewName(string filename, out string newName)
+        {
+            newName = m_rx.Replace(filename, m_replacement, 1);
+            return !string.Equals(filename, newName, StringComparison.Ordinal);
+        }
+
+        static public bool TryGetNewName(IEnumerable<RenamePattern> list, string filename, out string newName)
+        {
+            foreach(var pattern in list)
+            {
+                if (pattern.TryGetNewName(filename, out newName)) return true;
+            }
+            newName = filename;
+            return false;
+        }
     }
 } // Namespace

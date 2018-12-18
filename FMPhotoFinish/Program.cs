@@ -11,8 +11,10 @@ using System.Text;
  *  -transcode audio
  *  -log
  *  determine timezone
- * Next:
  *  preserve metadata on transcode and store updated metadata
+ * Next:
+ *  -setTimezone
+ *  -changeTimezone
  *  -sort
  *  -st
  *  -sDCF

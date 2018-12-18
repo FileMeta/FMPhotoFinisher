@@ -30,6 +30,8 @@ namespace FMPhotoFinish
         const string c_m4aExt = ".m4a";
 
         const string c_timezoneKey = "timezone";
+        const string c_makeKey = "make";
+        const string c_modelKey = "model";
 
         #region Static Members
 
@@ -195,94 +197,6 @@ namespace FMPhotoFinish
             return true;
         }
 
-        // TODO: Set more carefully defined standards for metatag.
-        // Key should follow standards for a hashtag. Value should use
-        // percent encoding for disallowed characters, underscore for space.
-        // So far, disallowed characters are whitespace and &.
-        static Regex s_rxMetatag = new Regex(
-            @"^&([A-Za-z0-9]+)=([^ \t\r\n&]+)$",
-            RegexOptions.CultureInvariant);
-
-        public static bool TryParseMetatag(string s, out string key, out string value)
-        {
-            var match = s_rxMetatag.Match(s);
-            if (!match.Success)
-            {
-                key = null;
-                value = null;
-                return false;
-            }
-
-            key = match.Groups[1].Value;
-            value = MetatagDecode(match.Groups[2].Value);
-            return true;
-        }
-
-        public static string FormatMetatag(string key, string value)
-        {
-            return $"&{key}={MetatagEncode(value)}";
-        }
-
-        public static string MetatagEncode(string s)
-        {
-            var sb = new StringBuilder();
-            foreach(char c in s)
-            {
-                switch (c)
-                {
-                    case ' ':
-                        sb.Append('_');
-                        break;
-
-                    case '_':
-                    case '%':
-                    case '&':
-                    case '\r':
-                    case '\n':
-                    case '\t':
-                        sb.Append($"%{((int)c):x2}");
-                        break;
-
-                    default:
-                        sb.Append(c);
-                        break;
-                }
-            }
-            return sb.ToString();
-        }
-
-        public static string MetatagDecode(string s)
-        {
-            var sb = new StringBuilder();
-            for (int i=0; i<s.Length; ++i)
-            {
-                char c = s[i];
-                if (c == '_')
-                {
-                    sb.Append(' ');
-                }
-                else if (c == '%' && i < s.Length+2)
-                {
-                    int n;
-                    if (int.TryParse(s.Substring(i + 1, 2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture,
-                        out n) && n > 0 && n < 256)
-                    {
-                        sb.Append((char)n);
-                        i += 2;
-                    }
-                    else
-                    {
-                        sb.Append('%');
-                    }
-                }
-                else
-                {
-                    sb.Append(c);
-                }
-            }
-            return sb.ToString();
-        }
-
         #endregion
 
         #region Delegates
@@ -292,10 +206,8 @@ namespace FMPhotoFinish
 #endregion
 
         string m_filepath;
-        string m_originalFilename;
         MediaType m_mediaType;
-
-        Dictionary<PROPERTYKEY, object> m_propsToSet = new Dictionary<PROPERTYKEY, object>();
+        string m_originalFilename;
 
         // File System Values (In local time)
         DateTime m_fsDateCreated;
@@ -316,8 +228,8 @@ namespace FMPhotoFinish
         DateTime? m_etDateTimeOriginal; // EXIF:DateTimeOriginal (.jpg, .jpeg) - RIFF:DateTimeOriginal (.avi) - in local time.
         TimeZoneTag m_etTimezone;
 
-        // Master Values
-        bool updateMetadata = false; // Metadata should be updated upon disposal
+        // Master Values (to be preserved and set)
+        bool m_updateMetadata = false; // Metadata should be updated upon disposal
         DateTime? m_creationDate;
         TimeZoneTag m_timezone;
         string m_make;
@@ -355,19 +267,15 @@ namespace FMPhotoFinish
                 m_model = (string)propstore.GetValue(PropertyKeys.Model);
 
                 // Keywords may be used to store custom metadata
-                var keywords = (string[])propstore.GetValue(PropertyKeys.Keywords);
-                if (keywords != null)
+                var metaTagSet = new MetaTagSet();
+                metaTagSet.LoadKeywords((string[])propstore.GetValue(PropertyKeys.Keywords));
                 {
-                    foreach(string s in keywords)
+                    string value;
+                    TimeZoneTag tz;
+                    if (metaTagSet.MetaTags.TryGetValue(c_timezoneKey, out value)
+                        && TimeZoneTag.TryParse(value, out tz))
                     {
-                        string key, value;
-                        TimeZoneTag timezone;
-                        if (TryParseMetatag(s, out key, out value)
-                            && key.Equals(c_timezoneKey, StringComparison.OrdinalIgnoreCase)
-                            &&  TimeZoneTag.TryParse(value, out timezone))
-                        {
-                            m_mtTimezone = timezone;
-                        }
+                        m_mtTimezone = tz;
                     }
                 }
             }
@@ -505,14 +413,14 @@ namespace FMPhotoFinish
             {
                 m_creationDate = m_isomCreationTime;
                 CreationDateSource = "Isom.CreationTime";
-                updateMetadata = true;
+                m_updateMetadata = true;
                 return true;
             }
             if (m_etDateTimeOriginal.HasValue)
             {
                 m_creationDate = m_etDateTimeOriginal;
                 CreationDateSource = "Exif.DateTimeOriginal";
-                updateMetadata = true;
+                m_updateMetadata = true;
                 return true;
             }
             // From file naming convention
@@ -522,7 +430,7 @@ namespace FMPhotoFinish
                 {
                     m_creationDate = dt;
                     CreationDateSource = "Filename";
-                    updateMetadata = true;
+                    m_updateMetadata = true;
                     return true;
                 }
             }
@@ -570,7 +478,7 @@ namespace FMPhotoFinish
             {
                 m_timezone = m_etTimezone;
                 TimezoneSource = "MakerNote";
-                updateMetadata = true;
+                m_updateMetadata = true;
                 return true;
             }
 
@@ -586,7 +494,7 @@ namespace FMPhotoFinish
             {
                 m_timezone = new TimeZoneTag(tzMinutes, tzMinutes == 0 ? TimeZoneKind.ForceLocal : TimeZoneKind.Normal);
                 TimezoneSource = "IsomVsExif";
-                updateMetadata = true;
+                m_updateMetadata = true;
                 return true;
             }
 
@@ -600,7 +508,7 @@ namespace FMPhotoFinish
             {
                 m_timezone = new TimeZoneTag(tzMinutes, tzMinutes == 0 ? TimeZoneKind.ForceLocal : TimeZoneKind.Normal);
                 TimezoneSource = "Filename";
-                updateMetadata = true;
+                m_updateMetadata = true;
                 return true;
             }
 
@@ -617,7 +525,7 @@ namespace FMPhotoFinish
                 {
                     m_timezone = TimeZoneTag.ForceLocal;
                     TimezoneSource = "FileSystem";
-                    updateMetadata = true;
+                    m_updateMetadata = true;
                     return true;
                 }
 
@@ -627,7 +535,7 @@ namespace FMPhotoFinish
                 {
                     m_timezone = TimeZoneTag.ForceLocal;
                     TimezoneSource = "FileSystem";
-                    updateMetadata = true;
+                    m_updateMetadata = true;
                     return true;
                 }
             }
@@ -638,6 +546,7 @@ namespace FMPhotoFinish
             {
                 m_timezone = TimeZoneTag.ForceLocal;
                 TimezoneSource = "LocalDate";
+                m_updateMetadata = true;
                 return true;
             }
 
@@ -682,21 +591,68 @@ namespace FMPhotoFinish
 
             if (disposing)
             {
-                if (m_propsToSet.Count > 0)
+                if (m_updateMetadata)
                 {
-#if DEBUG
-                    Debug.WriteLine(Path.GetFileName(m_filepath));
-                    foreach (var pair in m_propsToSet)
+                    if (m_mediaType == MediaType.Unsupported)
+                        throw new ApplicationException("Cannot update metadata on unsupported media type.");
+
+                    // If audio or video, attempt to use Isom to update creationDate
+                    bool creationDateStoredByIsom = false;
+                    if (m_creationDate.HasValue && (m_mediaType == MediaType.Video || m_mediaType == MediaType.Audio))
                     {
-                        Debug.WriteLine($"   {pair.Value}");
+                        var isom = IsomCoreMetadata.TryOpen(m_filepath, true);
+                        if (isom != null)
+                        {
+                            using (isom)
+                            {
+                                // Convert to UTC (this does nothing if it is already UTC.
+                                var dt = (m_timezone != null) ? m_timezone.ToUtc(m_creationDate.Value) : m_creationDate.Value.ToUniversalTime();
+                                isom.CreationTime = dt;
+                                isom.ModificationTime = dt;
+                                isom.Commit();
+                            }
+                            creationDateStoredByIsom = true;
+                        }
                     }
-#endif
+
                     using (var ps = PropertyStore.Open(m_filepath, true))
                     {
-                        foreach (var pair in m_propsToSet)
+                        // Prep the metatags with existing values
+                        var metaTagSet = new MetaTagSet();
+                        //metaTagSet.LoadKeywords((string[])ps.GetValue(PropertyKeys.Keywords));
+
+                        // Handle type-specific metadata
+                        if (m_mediaType == MediaType.Image)
                         {
-                            ps.SetValue(pair.Key, pair.Value);
+
+                            if (m_creationDate.HasValue && !creationDateStoredByIsom)
+                            {
+                                // Convert to local (this does nothing if it is already Local.
+                                var dt = (m_timezone != null) ? m_timezone.ToLocal(m_creationDate.Value) : m_creationDate.Value.ToLocalTime();
+                                ps.SetValue(PropertyKeys.DateTaken, dt);
+                            }
                         }
+
+                        // Audio and video both use Isom file format (.mp4 and .m4a)
+                        else
+                        {
+                            if (m_creationDate.HasValue && !creationDateStoredByIsom)
+                            {
+                                // Convert to UTC (this does nothing if it is already UTC.
+                                var dt = (m_timezone != null) ? m_timezone.ToUtc(m_creationDate.Value) : m_creationDate.Value.ToUniversalTime();
+                                ps.SetValue(PropertyKeys.DateEncoded, dt);
+                            }
+                        }
+
+                        if (m_timezone != null)
+                            metaTagSet.MetaTags[c_timezoneKey] = m_timezone.ToString();
+                        if (!string.IsNullOrEmpty(m_make))
+                            ps.SetValue(PropertyKeys.Make, m_make);
+                        if (!string.IsNullOrEmpty(m_model))
+                            ps.SetValue(PropertyKeys.Model, m_model);
+
+                        ps.SetValue(PropertyKeys.Keywords, metaTagSet.ToKeywords());
+
                         ps.Commit();
                     }
                 }
@@ -853,10 +809,7 @@ namespace FMPhotoFinish
             {
                 File.Delete(m_filepath);
                 m_filepath = newPath;
-                if (m_make != null)
-                    m_propsToSet.Add(PropertyKeys.Make, m_make);
-                if (m_model != null)
-                    m_propsToSet.Add(PropertyKeys.Model, m_model);
+                m_updateMetadata = true;
             }
             else
             {
@@ -950,8 +903,8 @@ namespace FMPhotoFinish
         public static PROPERTYKEY Keywords = new PROPERTYKEY("f29f85e0-4ff9-1068-ab91-08002b27b3d9", 5); // System.Keywords (tags)
         public static PROPERTYKEY Orientation = new PROPERTYKEY("14B81DA1-0135-4D31-96D9-6CBFC9671A99", 274);
         public static PROPERTYKEY Duration = new PROPERTYKEY("64440490-4C8B-11D1-8B70-080036B11A03", 3);
-        public static PROPERTYKEY Make = new PROPERTYKEY("14b81da1-0135-4d31-96d9-6cbfc9671a99", 271);
-        public static PROPERTYKEY Model = new PROPERTYKEY("14b81da1-0135-4d31-96d9-6cbfc9671a99", 272);
+        public static PROPERTYKEY Make = new PROPERTYKEY("14b81da1-0135-4d31-96d9-6cbfc9671a99", 271); // System.Photo.CameraManufacturer
+        public static PROPERTYKEY Model = new PROPERTYKEY("14b81da1-0135-4d31-96d9-6cbfc9671a99", 272); // System.Photo.CameraModel
     }
 
 }

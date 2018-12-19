@@ -214,6 +214,11 @@ namespace FMPhotoFinish
                             OnProgressReport("      Transcode failed; original format retained.");
                         }
                     }
+
+                    if (!mdf.CommitMetadata())
+                    {
+                        OnProgressReport("   ERROR: Failed to update metadata. File may be invalid.");
+                    }
                 }
             }
             catch (Exception err)

@@ -15,6 +15,7 @@ using System.Text;
  * Next:
  *  -setTimezone
  *  -changeTimezone
+ *  -setFileDate
  *  -sort
  *  -st
  *  -sDCF
@@ -111,10 +112,15 @@ Operations:
                    which is .mp4 for video and .m4a for audio. Also renames
                    .jpeg files to .jpg.
 
+  -setTimezone <tz>  Sets the timezone to the specified value keeping the
+                   local time the same. (See details on timezone below.)
+
 Other Options:
 
   -h               Print this help text and exit (ignoring all other
                    commands).
+
+  -listTimezones   List all timezone IDs and associated offsets.
 
   -log             Log all operations. The file will be named
                    ""<date> <time> FMPhotoFinish Log.txt"". If -d is
@@ -126,6 +132,43 @@ Other Options:
   -w               Wait for the user to press a key before exiting. This is
                    handy when running from a shortcut with no console or when
                    running under the debugger.
+
+Timezones:
+  The -setTimezone and -changeTimezone options are similar with an important
+  difference.
+
+  -setTimezone keeps local time the same while changing the timezone. So, if
+  a photo was taken at 9:30 AM EST, which is 14:30 UTC, setting timezone to
+  Pacific will result in 9:30 AM PST which is 17:30 UTC. This is useful when
+  the camera was set to the right local time but didn't have the correct
+  timezone set or doesn't even have a timezone setting.
+
+  -changeTimezone keeps UTC the same while changing the timezone. So, if a
+  photo was taken at 9:30 AM EST, which is 14:30 UTC, setting timezone to
+  pacific will result in 6:30 AM PSt, which remains 14:30 UTC. This is useful
+  when the time was set correctly at home and then you travelled to another
+  timezone without resetting the time on the camera.
+
+  Both operations require a timezone ID or offset. To get a list of
+  timezone IDs, use the ""-listTimezones"" command-line option. A timezone
+  offset is in the form of hours and minutes before or after UTC. Examples
+  are ""-05:00"" (Eastern), ""+01:00"" (European), ""+09:30"" (Australian
+  Central). If minutes are zero they can be left off. E.g. ""-05"", ""+03"".
+
+  Internally, JPEG photos store times in local time while MP4 videos store
+  time in UTC. FMPhotoFinish adds a custom timezone field so that times can
+  be determined consistently between the two even when changing timezone
+  settings on the computer. Many cameras don't have a timezone setting and
+  so they store the time for MP4 videos in local time even though the spec
+  says it should be UTC. Upon initial processing, FMPhotoFinish sets the
+  timezone on those files to ""0"" which means that the time should be
+  interpreted as local even though the specification says that it's UTC.
+
+  If the timezone is unknown (set to ""0"") then you using -changeTimeZone
+  will fail with an error message because the starting timezone is unknown.
+  Instead, first use -setTimeZone and then -changeTimeZone. Both options
+  may be used in one FMPhotoFinish operation or you can do them in two
+  consecutive operations.
 ";
 
         const string c_logsFolder = "logs";
@@ -135,6 +178,7 @@ Other Options:
         static bool s_showSyntax;
         static bool s_waitBeforeExit;
         static bool s_log;
+        static bool s_listTimezones;
         static TextWriter s_logWriter;
 
         static void Main(string[] args)
@@ -146,46 +190,7 @@ Other Options:
                 photoFinisher.StatusReported += ReportStatus;
                 ParseCommandLine(args, photoFinisher);
 
-                if (s_commandLineError)
-                {
-                    // Do nothing
-                }
-                else if (s_showSyntax)
-                {
-                    Console.WriteLine(c_Syntax);
-                }
-                else
-                {
-                    // Prepare logfile
-                    if (s_log)
-                    {
-                        string logDir = photoFinisher.DestinationDirectory;
-                        if (string.IsNullOrEmpty(logDir))
-                        {
-                            logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), c_logsFolder);
-                            if (!Directory.Exists(logDir))
-                            {
-                                Directory.CreateDirectory(logDir);
-                            }
-                        }
-
-                        var now = DateTime.Now;
-                        var logfilename = Path.Combine(logDir,
-                            $"{now.ToString("yyyy-MM-dd hhmmss")} {c_logFileSuffix}");
-
-                        s_logWriter = new StreamWriter(logfilename, false, Encoding.UTF8);
-
-                        // Metadata in MicroYAML format
-                        s_logWriter.WriteLine("---");
-                        s_logWriter.WriteLine($"date: {now.ToString("yyyy-MM-dd hh:mm:ss")}");
-                        s_logWriter.WriteLine("title: FMPhotoFinish Log");
-                        s_logWriter.WriteLine($"commandline: {Environment.CommandLine}");
-                        s_logWriter.WriteLine("...");
-                    }
-
-                    // Do the work.
-                    photoFinisher.PerformOperations();
-                }
+                PerformOperations(photoFinisher);
             }
             catch (Exception err)
             {
@@ -285,6 +290,11 @@ Other Options:
                             s_log = true;
                             break;
 
+                        case "-listtimezones":
+                        case "-listtimezone":
+                            s_listTimezones = true;
+                            break;
+
                         default:
                             Console.WriteLine($"Command-line syntax error: '{args[i]}' is not a recognized command.");
                             Console.WriteLine("Use '-h' for syntax help");
@@ -323,6 +333,53 @@ Other Options:
                 Console.Error.Write('\r');
                 Console.ForegroundColor = ConsoleColor.White;
             }
+        }
+
+        static void PerformOperations(PhotoFinisher photoFinisher)
+        {
+            if (s_commandLineError) return;
+
+            if (s_showSyntax)
+            {
+                Console.WriteLine(c_Syntax);
+                return;
+            }
+
+            if (s_listTimezones)
+            {
+                TimeZoneParser.ListTimezoneIds();
+                return;
+            }
+
+            // Prepare logfile
+            if (s_log)
+            {
+                string logDir = photoFinisher.DestinationDirectory;
+                if (string.IsNullOrEmpty(logDir))
+                {
+                    logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), c_logsFolder);
+                    if (!Directory.Exists(logDir))
+                    {
+                        Directory.CreateDirectory(logDir);
+                    }
+                }
+
+                var now = DateTime.Now;
+                var logfilename = Path.Combine(logDir,
+                    $"{now.ToString("yyyy-MM-dd hhmmss")} {c_logFileSuffix}");
+
+                s_logWriter = new StreamWriter(logfilename, false, Encoding.UTF8);
+
+                // Metadata in MicroYAML format
+                s_logWriter.WriteLine("---");
+                s_logWriter.WriteLine($"date: {now.ToString("yyyy-MM-dd hh:mm:ss")}");
+                s_logWriter.WriteLine("title: FMPhotoFinish Log");
+                s_logWriter.WriteLine($"commandline: {Environment.CommandLine}");
+                s_logWriter.WriteLine("...");
+            }
+
+            // Do the work.
+            photoFinisher.PerformOperations();
         }
 
     } // Class Program

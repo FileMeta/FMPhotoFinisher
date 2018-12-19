@@ -32,7 +32,6 @@ namespace FMPhotoFinish
         const string c_timezoneKey = "timezone";
         const string c_makeKey = "make";
         const string c_modelKey = "model";
-        const string c_originalFilenameKey = "originalFilename";
 
         #region Static Members
 
@@ -230,7 +229,6 @@ namespace FMPhotoFinish
 
         // Metatag values from Property System Keywords
         TimeZoneTag m_mtTimezone;
-        string m_mtOriginalFilename;    // Historically original filename.
 
         // Valies from IsomCoreMetadata
         DateTime? m_isomCreationTime;
@@ -249,20 +247,7 @@ namespace FMPhotoFinish
         public MediaFile(string filepath, string originalFilename)
         {
             m_filepath = filepath;
-            if (originalFilename == null)
-            {
-                m_originalFilename = Path.GetFileName(filepath);
-            }
-            else
-            {
-                m_originalFilename = originalFilename;
-                if (!string.Equals(originalFilename, Path.GetFileName(filepath)))
-                {
-                    m_updateMetadata = true;    // Need to store originalFilename
-                }
-            }
             m_originalFilename = originalFilename ?? Path.GetFileName(filepath);
-
 
             string ext = Path.GetExtension(filepath).ToLowerInvariant();
             if (!s_mediaExtensions.TryGetValue(ext, out m_mediaType))
@@ -301,15 +286,6 @@ namespace FMPhotoFinish
                         && TimeZoneTag.TryParse(value, out tz))
                     {
                         m_mtTimezone = tz;
-                    }
-
-                    if (metaTagSet.MetaTags.TryGetValue(c_originalFilenameKey, out value))
-                    {
-                        m_mtOriginalFilename = value;
-                    }
-                    else
-                    {
-                        m_updateMetadata = true;    // Need to update originalFilename
                     }
                 }
             }
@@ -441,7 +417,6 @@ namespace FMPhotoFinish
                 // Rename
                 File.Move(m_filepath, newPath);
                 m_filepath = newPath;
-                m_updateMetadata = true;    // Need to store originalFilename
                 return true;
             }
 
@@ -638,7 +613,6 @@ namespace FMPhotoFinish
             {
                 Debug.Assert(ext.Equals(".jpeg", StringComparison.OrdinalIgnoreCase));
                 ChangeExtensionTo(c_jpgExt);
-                m_updateMetadata = true; // Need to update originalFilename
                 return true;
             }
 
@@ -718,11 +692,6 @@ namespace FMPhotoFinish
                                 ps.SetValue(PropertyKeys.Make, m_make);
                             if (!string.IsNullOrEmpty(m_model))
                                 ps.SetValue(PropertyKeys.Model, m_model);
-
-                            // Original filename. If the metatag value exists, it's an historical original
-                            // filename from a previous run of this or some other app. If it doesn't exist
-                            // then we use the value from the beginning of this job.
-                            metaTagSet.MetaTags[c_originalFilenameKey] = m_mtOriginalFilename ?? m_originalFilename;
 
                             ps.SetValue(PropertyKeys.Keywords, metaTagSet.ToKeywords());
 
@@ -887,7 +856,7 @@ namespace FMPhotoFinish
             {
                 File.Delete(m_filepath);
                 m_filepath = newPath;
-                m_updateMetadata = true;
+                m_updateMetadata = true; // Need to restore metadata to the transcoded file
             }
             else
             {

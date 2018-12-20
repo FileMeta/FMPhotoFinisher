@@ -306,6 +306,12 @@ namespace FMPhotoFinish
 
             // Load ExifTool Properties
             {
+                // Init ExifTool if it hasn't been done so far.
+                if (s_exifTool == null)
+                {
+                    s_exifTool = new ExifToolWrapper.ExifTool();
+                }
+
                 var exifProperties = new List<KeyValuePair<string, string>>();
                 s_exifTool.GetProperties(m_filepath, exifProperties);
                 string software = null;
@@ -624,6 +630,53 @@ namespace FMPhotoFinish
             return Transcode(reporter);
         }
 
+        public bool SetTimezone(TimeZoneInfo tzi, out bool dstActive)
+        {
+            // If no creationDate, do nothing.
+            if (!m_creationDate.HasValue)
+            {
+                dstActive = false;
+                return false;
+            }
+
+            // If no timezone has yet been determined, set to ForceLocal
+            if (m_timezone == null) m_timezone = TimeZoneTag.ForceLocal;
+
+            // Using the existing timezone, make sure the creationDate is in local time (does nothing if already local)
+            m_creationDate = m_timezone.ToLocal(m_creationDate.Value);
+
+            // Set the timezone offset for the creationDate (may be different values according to daylight savings)
+            dstActive = tzi.IsDaylightSavingTime(m_creationDate.Value);
+            m_timezone = new TimeZoneTag(tzi.GetUtcOffset(m_creationDate.Value), TimeZoneKind.Normal);
+
+            // When metadata is committed, m_creationDate will be stored in either local or UTC according to the file type.
+            m_updateMetadata = true;
+
+            return true;
+        }
+
+        public bool ChangeTimezone(TimeZoneInfo tzi, out bool dstActive)
+        {
+            // If no creationDate, do nothing.
+            dstActive = false;
+            if (!m_creationDate.HasValue) return false;
+
+            // If no existing timezone, do nothing.
+            if (m_timezone == null || m_timezone.Kind != TimeZoneKind.Normal) return false;
+
+            // Using the existing timezone, make sure the creationDate is in UTC (does nothing if already UTC)          
+            m_creationDate = m_timezone.ToUtc(m_creationDate.Value);
+
+            // Set the timezone offset for the creationDate (may be different values according to daylight savings)
+            dstActive = tzi.IsDaylightSavingTime(m_creationDate.Value);
+            m_timezone = new TimeZoneTag(tzi.GetUtcOffset(m_creationDate.Value), TimeZoneKind.Normal);
+
+            // When metadata is committed, m_creationDate will be stored in either local or UTC according to the file type.
+            m_updateMetadata = true;
+
+            return true;
+        }
+
         public bool CommitMetadata()
         {
             if (!m_updateMetadata) return true; // Nothing to update
@@ -902,50 +955,26 @@ namespace FMPhotoFinish
 
 #endregion // Private Members
 
-#region Private Static Members
-
-        // Cache whether a propery is copyable
-        static Dictionary<PROPERTYKEY, bool> s_propertyIsCopyable = new Dictionary<PROPERTYKEY, bool>();
-
-        static bool IsCopyable(PROPERTYKEY pk)
-        {
-            bool result;
-            if (s_propertyIsCopyable.TryGetValue(pk, out result))
-            {
-                return result;
-            }
-
-            var desc = s_propSystem.GetPropertyDescription(pk);
-            result = desc != null
-                && desc.ValueTypeIsSupported
-                && (desc.TypeFlags & PROPDESC_TYPE_FLAGS.PDTF_ISINNATE) == 0;
-            s_propertyIsCopyable[pk] = result;
-
-            return result;
-        }
-
-#endregion
-
 #region Init and Shutdown
 
-        static PropertySystem s_propSystem = new PropertySystem();
-        static ExifToolWrapper.ExifTool s_exifTool = new ExifToolWrapper.ExifTool();
+        static ExifToolWrapper.ExifTool s_exifTool;
         static readonly StaticDisposer s_psDisposer = new StaticDisposer();
+
+        public static void DisposeOfStaticResources()
+        {
+            if (s_exifTool != null)
+            {
+                var exifTool = s_exifTool;
+                s_exifTool = null;
+                exifTool.Dispose();
+            }
+        }
 
         private sealed class StaticDisposer
         {
             ~StaticDisposer()
             {
-                if (s_propSystem != null)
-                {
-                    s_propSystem.Dispose();
-                    s_propSystem = null;
-                }
-                if (s_exifTool != null)
-                {
-                    s_exifTool.Dispose();
-                    s_exifTool = null;
-                }
+                DisposeOfStaticResources();
             }
         }
 

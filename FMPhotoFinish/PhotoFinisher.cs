@@ -58,14 +58,32 @@ namespace FMPhotoFinish
         public bool Move { get; set; }
 
         /// <summary>
-        /// Auto-sort the images into directories according to date taken
+        /// Sets the timezone to the specified value while keeping the local time the same.
         /// </summary>
-        public bool AutoSort { get; set; }
+        /// <remarks>
+        /// May be combined with ChangeTimezoneTo in which case set timezone will occur first
+        /// and then change timezone.
+        /// </remarks>
+        public TimeZoneInfo SetTimezoneTo { get; set; }
+
+        /// <summary>
+        /// Changes the timezone to the specified value while keeping the UTC time the same.
+        /// </summary>
+        /// <remarks>
+        /// May be combined with SetTimezoneTo in which case set timezone will occur first
+        /// and then change timezone.
+        /// </remarks>
+        public TimeZoneInfo ChangeTimezoneTo { get; set; }
 
         /// <summary>
         /// Transcode audio and video files into the preferred format. Also renames .jpeg to .jpg
         /// </summary>
         public bool Transcode { get; set; }
+
+        /// <summary>
+        /// Auto-sort the images into directories according to date taken
+        /// </summary>
+        public bool AutoSort { get; set; }
 
         #endregion Operations
 
@@ -152,6 +170,8 @@ namespace FMPhotoFinish
 
             ProcessMediaFiles();
 
+            MediaFile.DisposeOfStaticResources();
+
             OnProgressReport(null);
             OnProgressReport("All operations complete!");
         }
@@ -185,14 +205,16 @@ namespace FMPhotoFinish
                         OnProgressReport("   Rename to: " + Path.GetFileName(mdf.Filepath));
                     }
 
-                    if (mdf.DeterimineCreationDate())
+                    bool hasCreationDate = mdf.DeterimineCreationDate();
+                    if (hasCreationDate)
                     {
-                        OnProgressReport($"   Date {mdf.CreationDate.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)} ({mdf.CreationDate.Kind}) from {mdf.CreationDateSource}.");
+                        OnProgressReport($"   Date: {mdf.CreationDate.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)} ({mdf.CreationDate.Kind}) from {mdf.CreationDateSource}.");
                     }
 
-                    if (mdf.DetermineTimezone())
+                    bool hasTimezone = mdf.DetermineTimezone();
+                    if (hasTimezone)
                     {
-                        OnProgressReport($"   Timezone {mdf.Timezone} from {mdf.TimezoneSource}.");
+                        OnProgressReport($"   Timezone: {Format(mdf.Timezone)} from {mdf.TimezoneSource}.");
                     }
 
                     if (AutoRotate && mdf.Orientation != 1)
@@ -203,7 +225,7 @@ namespace FMPhotoFinish
 
                     if (Transcode && !mdf.IsPreferredFormat)
                     {
-                        OnProgressReport($"   Transcode to {mdf.PreferredFormat}");
+                        OnProgressReport($"   Transcode to: {mdf.PreferredFormat}");
                         if (mdf.TranscodeToPreferredFormat(msg => OnStatusReport(msg)))
                         {
                             fi.Filepath = mdf.Filepath;
@@ -212,6 +234,48 @@ namespace FMPhotoFinish
                         else
                         {
                             OnProgressReport("      Transcode failed; original format retained.");
+                        }
+                    }
+
+                    if (SetTimezoneTo != null)
+                    {
+                        bool dstActive;
+                        if (!hasCreationDate)
+                        {
+                            OnProgressReport("   ERROR: Cannot set timezone; file does not have a creationDate set.");
+                        }
+                        else if (mdf.SetTimezone(SetTimezoneTo, out dstActive))
+                        {
+                            OnProgressReport($"   Timezone set to: {mdf.Timezone} {(dstActive ? "(DST)" : "(Standard)")}");
+                            var localCreationDate = mdf.Timezone.ToLocal(mdf.CreationDate);
+                            OnProgressReport($"   Date: {localCreationDate.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)} (Local)");
+                        }
+                        else
+                        {
+                            OnProgressReport($"   ERROR: Failed to set timezone.");
+                        }
+                    }
+
+                    if (ChangeTimezoneTo != null)
+                    {
+                        bool dstActive;
+                        if (!hasCreationDate)
+                        {
+                            OnProgressReport("   ERROR: Cannot change timezone; file does not have a creationDate set.");
+                        }
+                        else if (mdf.Timezone == null || mdf.Timezone.Kind != FileMeta.TimeZoneKind.Normal)
+                        {
+                            OnProgressReport("   ERROR: Cannot change timezone; file does not have an existing timezone. Use -setTimezone first.");
+                        }
+                        else if (mdf.ChangeTimezone(ChangeTimezoneTo, out dstActive))
+                        {
+                            OnProgressReport($"   Timezone changed to: {mdf.Timezone} {(dstActive ? "(DST)" : "(Standard)")}");
+                            var localCreationDate = mdf.Timezone.ToLocal(mdf.CreationDate);
+                            OnProgressReport($"   Date: {localCreationDate.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)} (Local)");
+                        }
+                        else
+                        {
+                            OnProgressReport($"   ERROR: Failed to change timezone.");
                         }
                     }
 
@@ -293,6 +357,12 @@ namespace FMPhotoFinish
         private static bool HasWildcard(string filename)
         {
             return filename.IndexOfAny(s_wildcards) >= 0;
+        }
+
+        private static string Format(FileMeta.TimeZoneTag tz)
+        {
+            if (tz.Kind != FileMeta.TimeZoneKind.Normal) return $"({tz.Kind})";
+            return tz.ToString();
         }
 
     } // Class PhotoFinisher

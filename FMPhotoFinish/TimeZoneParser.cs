@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
+using FileMeta;
 
 namespace FMPhotoFinish
 {
@@ -54,11 +54,27 @@ namespace FMPhotoFinish
                     // In that case we just skip the abbreviation.
                 }
             }
+
+            Console.WriteLine();
+            Console.WriteLine("Examples of Explicit Timezone Values (not sensitive to daylight savings):");
+            Console.WriteLine("   \"-08:00\"\r\n   \"-05:00\"\r\n   \"+00:00\"\r\n   \"+01:00\"\r\n   \"+10:00\"\r\n");
         }
 
         public static TimeZoneInfo ParseTimeZoneId(string id)
         {
-            // First, check the abbreviations
+            // See if explicit timezone offset
+            if (id[0] == '-' || id[0] == '+')
+            {
+                TimeZoneTag tzt;
+                if (TimeZoneTag.TryParse(id, out tzt))
+                {
+                    string idstr = $"(UTC{id})";
+                    string name = $"{idstr} Custom";
+                    return TimeZoneInfo.CreateCustomTimeZone(idstr, tzt.UtcOffset, name, name);
+                }
+            }
+
+            // Check the abbreviations
             foreach(var pair in s_tzAbbreviations)
             {
                 if (string.Equals(id, pair.Key, StringComparison.OrdinalIgnoreCase))

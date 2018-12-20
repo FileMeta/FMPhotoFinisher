@@ -12,9 +12,9 @@ using System.Text;
  *  -log
  *  determine timezone
  *  preserve metadata on transcode and store updated metadata
- * Next:
  *  -setTimezone
  *  -changeTimezone
+ * Next:
  *  -setFileDate
  *  -sort
  *  -st
@@ -114,6 +114,9 @@ Operations:
 
   -setTimezone <tz>  Sets the timezone to the specified value keeping the
                    local time the same. (See details on timezone below.)
+
+  -changeTimezone <tz>  Changes the timezone to the specified value keeping
+                   the UTC time the same. (See details on timezone below.)
 
 Other Options:
 
@@ -284,6 +287,34 @@ Timezones:
 
                         case "-autorot":
                             photoFinisher.AutoRotate = true;
+                            break;
+
+                        case "-settimezone":
+                            ++i;
+                            {
+                                var tzi = TimeZoneParser.ParseTimeZoneId(args[i]);
+                                if (tzi == null)
+                                {
+                                    Console.WriteLine($"Invalid value for -setTimezone '{args[i]}'. Use '-listTimezones' option to find valid values.");
+                                    s_commandLineError = true;
+                                    break;
+                                }
+                                photoFinisher.SetTimezoneTo = tzi;
+                            }
+                            break;
+
+                        case "-changetimezone":
+                            ++i;
+                            {
+                                var tzi = TimeZoneParser.ParseTimeZoneId(args[i]);
+                                if (tzi == null)
+                                {
+                                    Console.WriteLine($"Invalid value for -changeTimezone '{args[i]}'. Use '-listTimezones' option to find valid values.");
+                                    s_commandLineError = true;
+                                    break;
+                                }
+                                photoFinisher.ChangeTimezoneTo = tzi;
+                            }
                             break;
 
                         case "-log":

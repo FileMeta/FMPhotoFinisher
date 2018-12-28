@@ -15,11 +15,15 @@ using System.Text;
  *  -setTimezone
  *  -changeTimezone
  * Next:
- *  -setFileDate
+ *  -setDate
+ *  -updateFileDate (dateCreated is not preserved when copying across volumes, but dateModified should reflect most recent change to metadata)
  *  -sort
  *  -st
  *  -sDCF
  *  add uuid for each image
+ *  Test with no options - should just list values (potential conflict with design principles - figure this out)
+ *  Tabular output format option (for later analytics)
+ *  Add UUID Field (look for existing options)
  * 
  * Design Principles:
  *  * No command-line option required to preserve, transfer, or add information. For example,
@@ -112,6 +116,10 @@ Operations:
                    which is .mp4 for video and .m4a for audio. Also renames
                    .jpeg files to .jpg.
 
+  -setDate <dateTime>  Set the dateCreated/dateTaken value in the metadata
+                   to the specified date and time. (See details on format
+                   of the date below.)
+
   -setTimezone <tz>  Sets the timezone to the specified value keeping the
                    local time the same. (See details on timezone below.)
 
@@ -135,6 +143,40 @@ Other Options:
   -w               Wait for the user to press a key before exiting. This is
                    handy when running from a shortcut with no console or when
                    running under the debugger.
+
+SetDate:
+  The date-time value should be in W3CDTF format (see
+  https://www.w3.org/TR/NOTE-datetime). Hre is an example:
+    2018-12-20T17:55:24-07:00
+
+
+  Means, 20 December 2018 at 5:55:24 PM Mountain Standard Time (UTC-7)
+
+  You can leave off the seconds or minutes. For example:
+    2018-12-20T17:55-07:00
+
+  If you leave off the timezone then the current timezone setting of the
+  computer will be used.
+    2018-12-20T17:55
+
+  You can specify just the date. If only the date is specified, the time is
+  set to 12:00 noon (middle of the day) to avoid having the date shift around
+  when just one timezone away.
+    2018-12-20
+
+  You can even specify just the month or year. When setting anything less
+  precise than the hour and minute, the custom ""datePrecision"" metadata
+  tag will be set to the number of significant digits in the date and time
+  as follows: 4=year, 6=month, 8=day, 10=hour, 12=minute, 14=second,
+  17=millisecond precision.
+
+  Instead of putting appending the timezone to the date-time value, You can
+  set the timezone separately using the -setTimezone argument. You can even
+  set the time in one timezone and then change it to another by combining
+  -setDate with the -changeTimezone argument.
+
+  Regardless of their order on the command-line, arguments are processed in
+  this order: -setDate -setTimezone -changeTimezone.
 
 Timezones:
   The -setTimezone and -changeTimezone options are similar with an important

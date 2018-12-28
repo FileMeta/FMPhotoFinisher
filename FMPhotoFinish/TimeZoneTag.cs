@@ -3,6 +3,7 @@ This will eventually be a CodeBit. The class manages TimeZone metadata field val
 */
 using System;
 using System.Globalization;
+using System.Text;
 
 namespace FileMeta
 {
@@ -85,9 +86,13 @@ namespace FileMeta
     {
         #region Constants
 
+        public const int MinPrecision = 4;
+        public const int MaxPrecision = 21;
+
         const string c_local = "0";
         const string c_utc = "Z";
-        const long c_ticksPerMinute = 60 * 10000000;
+        const long c_ticksPerSecond = 10000000;
+        const long c_ticksPerMinute = 60 * c_ticksPerSecond;
 
         #endregion Constants
 
@@ -172,28 +177,114 @@ namespace FileMeta
         /// <param name="dateTag">The value to be parsed in <see cref="https://www.w3.org/TR/NOTE-datetime">W3CDTF</see> format.</param>
         /// <param name="date">The <see cref="DateTime"/> from the date and time portion.</param>
         /// <param name="timezone">The <see cref="TimeZoneTag"/> from the timezone portion.</param>
-        /// <param name="significantDigits">The significant digits in the date and time portion.</param>
+        /// <param name="precision">The significant digits in the date and time portion.</param>
         /// <returns>True if successful, else false.</returns>
         /// <remarks>
         /// <para>This method has not yet been implemented.</para>
         /// <para>The <see cref="https://www.w3.org/TR/NOTE-datetime">W3CDTF</see> format has date and timezone portions.
         /// This method parses both.</para>
         /// <para>If the timezone portion is not included in the input string then the resulting <paramref name="timezone"/>
-        /// will have <see cref="Kind"/> set to <see cref="TimeZoneKind.Unknown"/>.
+        /// will have <see cref="Kind"/> set to <see cref="TimeZoneKind.ForceLocal"/>.
         /// </para>
         /// <para>If the timezone portion is set to "Z" indicating UTC, then the resulting <paramref name="timezone"/>
         /// will have <see cref="Kind"/> set to <see cref="TimeZoneKind.ForceUtc"/> and the <see cref="UtcOffset"/>
         /// will be zero.
         /// </para>
         /// <para>The W2CDTF format permits partial date-time values. For example "2018" is just a year with no
-        /// other information. The <paramref name="significantDigits"/> value indicates how much detail is included
+        /// other information. The <paramref name="precision"/> value indicates how much detail is included
         /// as follows: 4 = year, 6 = month, 8 = day, 10 = hour, 12 = minute, 14 = second, 17 = millisecond, 20 = microsecond,
         /// 21 = tick (100 nanoseconds).
         /// </para>
         /// </remarks>
-        public static bool TryParseDateTag(string dateTag, out DateTime date, out TimeZoneTag timezone, out int significantDigits)
+        public static bool TryParseDateTag(string dateTag, out DateTime date, out TimeZoneTag timezone, out int precision)
         {
-            throw new NotImplementedException();
+            // Init values for failure case
+            date = new DateTime(0L);
+            timezone = null;
+            precision = 0;
+
+            // Init parts
+            int year = 0;
+            int month = 1;
+            int day = 1;
+            int hour = 12;  // Noon
+            int minute = 0;
+            int second = 0;
+            long ticks = 0;
+
+            // Track position
+            int pos = 0;
+
+            if (!int.TryParse(dateTag.Substring(0, 4), out year)
+                || year < 1 || year > 9999) return false;
+            precision = 4; // year
+            pos = 4;
+            if (dateTag.Length > 5 && dateTag[4] == '-')
+            {
+                if (!int.TryParse(dateTag.Substring(5, 2), out month)
+                    || month < 1 || month > 12) return false;
+                precision = 6; // month
+                pos = 7;
+                if (dateTag.Length > 8 && dateTag[7] == '-')
+                {
+                    if (!int.TryParse(dateTag.Substring(8, 2), out day)
+                        || day < 1 || day > 31) return false;
+                    precision = 8; // day
+                    pos = 10;
+                    if (dateTag.Length > 11 && (dateTag[10] == 'T' || dateTag[10] == ' ')) // Even though W3CDTF and ISO 8601 specify 'T' separating date and time, tolerate a space as an alternative.
+                    {
+                        if (!int.TryParse(dateTag.Substring(11, 2), out hour)
+                            || hour < 0 || hour > 23) return false;
+                        precision = 10; // hour
+                        pos = 13;
+                        if (dateTag.Length > 14 && dateTag[13] == ':')
+                        {
+                            if (!int.TryParse(dateTag.Substring(14, 2), out minute)
+                                || minute < 0 || minute > 59) return false;
+                            precision = 12; // minute
+                            pos = 16;
+                            if (dateTag.Length > 17 && dateTag[16] == ':')
+                            {
+                                if (!int.TryParse(dateTag.Substring(17, 2), out second)
+                                    || second < 0 || second > 59) return false;
+                                precision = 14; // second
+                                pos = 19;
+                                if (dateTag.Length > 20 && dateTag[19] == '.')
+                                {
+                                    ++pos;
+                                    int anchor = pos;
+                                    while (pos < dateTag.Length && char.IsDigit(dateTag[pos]))
+                                        ++pos;
+
+                                    precision = 14 + (pos - anchor);
+                                    if (precision > MaxPrecision)
+                                        precision = MaxPrecision;
+
+                                    double d;
+                                    if (!double.TryParse(dateTag.Substring(anchor, pos - anchor), out d)) return false;
+                                    ticks = (long)(d * Math.Pow(10.0, 7.0 - (pos - anchor)));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Attempt to parse the timezone
+            DateTimeKind dtk = DateTimeKind.Unspecified;
+            if (pos < dateTag.Length)
+            {
+                if (!TryParse(dateTag.Substring(pos), out timezone)) return false;
+                dtk = (timezone.Kind == TimeZoneKind.ForceUtc) ? DateTimeKind.Utc : DateTimeKind.Local;
+            }
+            else
+            {
+                timezone = ForceLocal;
+                dtk = DateTimeKind.Local;
+            }
+
+            date = new DateTime(year, month, day, hour, minute, second, dtk).AddTicks(ticks);
+            return true;
         }
 
         /// <summary>
@@ -202,21 +293,72 @@ namespace FileMeta
         /// </summary>
         /// <param name="date">The date and time to include.</param>
         /// <param name="timezone">The timezone value to include.</param>
-        /// <param name="significantDigits">The number of significant digits of date and time to include (defaults to 14, see remarks).</param>
+        /// <param name="precision">The number of significant digits of date and time to include (defaults to 14, see remarks).</param>
         /// <returns>The formatted tag.</returns>
         /// <remarks>
         /// <para>This method has not yet been implemented.
         /// </para>
         /// <para>The W2CDTF format permits partial date-time values. For example "2018" is just a year with no
-        /// other information. The <paramref name="significantDigits"/> value indicates how much detail is included
+        /// other information. The <paramref name="precision"/> value indicates how much detail is included
         /// as follows: 4 = year, 6 = month, 8 = day, 10 = hour, 12 = minute, 14 = second, 17 = millisecond, 20 = microsecond,
         /// 21 = tick (100 nanoseconds).</para>
         /// </remarks>
-        public static string FormatDateTag(DateTime date, TimeZoneTag timezone, int significantDigits = 14)
+        public static string FormatDateTag(DateTime date, TimeZoneTag timezone, int precision = 14)
         {
-            throw new NotImplementedException();
+            if (timezone.Kind == TimeZoneKind.Normal && date.Kind == DateTimeKind.Utc)
+            {
+                date = timezone.ToLocal(date);
+            }
+
+            var sb = new StringBuilder();
+            sb.AppendFormat("{0:D4}", date.Year);
+            if (precision >= 6)
+            {
+                sb.AppendFormat("-{0:D2}", date.Month);
+            }
+            if (precision >= 8)
+            {
+                sb.AppendFormat("-{0:D2}", date.Day);
+            }
+            if (precision >= 10)
+            {
+                sb.AppendFormat("T{0:D2}", date.Hour);
+            }
+            if (precision >= 12)
+            {
+                sb.AppendFormat(":{0:D2}", date.Minute);
+            }
+            if (precision >= 14)
+            {
+                sb.AppendFormat(":{0:D2}", date.Second);
+            }
+            if (precision > 14)
+            {
+                if (precision > MaxPrecision)
+                    precision = MaxPrecision;
+                int decimals = precision - 14;
+                sb.Append('.');
+                long ticks = date.Ticks % c_ticksPerSecond;
+                long pow = c_ticksPerSecond / 10;
+                for (int i = 0; i < decimals; ++i)
+                {
+                    sb.Append((char)('0' + (ticks / pow) % 10));
+                    pow /= 10;
+                }
+            }
+            if (timezone.Kind == TimeZoneKind.Normal || timezone.Kind == TimeZoneKind.ForceUtc)
+            {
+                sb.Append(timezone.ToString());
+            }
+
+            return sb.ToString();
         }
 
+        /// <summary>
+        /// Indicate whether a timezone value is not specified (either null or unknown)
+        /// </summary>
+        /// <param name="timezone">The timezone value to test.</param>
+        /// <returns>True if the value is null or if <see cref="Kind"/> is <see cref="TimeZoneKind.Unknown"/>. Else, false.</returns>
         public static bool IsNullOrUnknown(TimeZoneTag timezone)
         {
             return timezone == null || timezone.Kind == TimeZoneKind.Unknown;
@@ -404,6 +546,63 @@ namespace FileMeta
         }
 
         #endregion Standard Methods
+
+        #region Test
+
+#if DEBUG
+
+        /* When this is converted into a CodeBit, the tests should be
+         * automated (verifying the result rather than visual verification)
+         * and included as the unit test for the dedicated project. */
+
+        public static void PerformTest()
+        {
+            TestTagParse("2018");
+            TestTagParse("2018-12");
+            TestTagParse("2018-12-28");
+            TestTagParse("2018-12-28T10");
+            TestTagParse("2018-12-28T10-05:00");
+            TestTagParse("2018-12-28T10+08:00");
+            TestTagParse("2018-12-28T10:59");
+            TestTagParse("2018-12-28T10:59-05");
+            TestTagParse("2018-12-28T10:59+08");
+            TestTagParse("2018-12-28T10:59:45");
+            TestTagParse("2018-12-28T10:59:45-5");
+            TestTagParse("2018-12-28T10:59:45+8");
+            TestTagParse("2018-12-28T10:59:45.123");
+            TestTagParse("2018-12-28T10:59:45.123-5");
+            TestTagParse("2018-12-28T10:59:45.123+8");
+            TestTagParse("2018-12-28T10:59:45.1");
+            TestTagParse("2018-12-28T10:59:45.12");
+            TestTagParse("2018-12-28T10:59:45.123");
+            TestTagParse("2018-12-28T10:59:45.1234");
+            TestTagParse("2018-12-28T10:59:45.12345");
+            TestTagParse("2018-12-28T10:59:45.123456");
+            TestTagParse("2018-12-28T10:59:45.1234567");
+            TestTagParse("2018-12-28T10:59:45.12345678");
+            TestTagParse("2018-12-28T10:59:45.12345678+08:23");
+        }
+
+        static void TestTagParse(string s)
+        {
+            Console.WriteLine(s);
+            DateTime dt;
+            FileMeta.TimeZoneTag tz;
+            int precision;
+            if (!FileMeta.TimeZoneTag.TryParseDateTag(s, out dt, out tz, out precision))
+            {
+                Console.WriteLine("Fail");
+                return;
+            }
+            Console.WriteLine($"   Date: {dt.ToString("o")}");
+            Console.WriteLine($"   Fmt:  {FileMeta.TimeZoneTag.FormatDateTag(dt, tz, precision)}");
+            Console.WriteLine($"   TZ:   {tz}");
+            Console.WriteLine($"   Pre:  {precision}");
+        }
+
+#endif
+
+#endregion Tests
 
     }
 }

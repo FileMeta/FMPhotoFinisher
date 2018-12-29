@@ -42,6 +42,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="DateTag.cs" />
     <Compile Include="ExifToolWrapper.cs" />
     <Compile Include="IsomCoreMetadata.cs" />
     <Compile Include="JpegRotator.cs" />

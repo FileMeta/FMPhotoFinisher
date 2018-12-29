@@ -21,6 +21,7 @@ using System.Text;
  *  -st
  *  -sDCF
  *  add uuid for each image
+ *  -shiftDate
  *  Test with no options - should just list values (potential conflict with design principles - figure this out)
  *  Tabular output format option (for later analytics)
  *  Add UUID Field (look for existing options)
@@ -146,11 +147,10 @@ Other Options:
 
 SetDate:
   The date-time value should be in W3CDTF format (see
-  https://www.w3.org/TR/NOTE-datetime). Hre is an example:
+  https://www.w3.org/TR/NOTE-datetime). Here is an example:
     2018-12-20T17:55:24-07:00
 
-
-  Means, 20 December 2018 at 5:55:24 PM Mountain Standard Time (UTC-7)
+  This means, 20 December 2018 at 5:55:24 PM Mountain Standard Time (UTC-7)
 
   You can leave off the seconds or minutes. For example:
     2018-12-20T17:55-07:00
@@ -329,6 +329,20 @@ Timezones:
 
                         case "-autorot":
                             photoFinisher.AutoRotate = true;
+                            break;
+
+                        case "-setdate":
+                            ++i;
+                            {
+                                FileMeta.DateTag dt;
+                                if (!FileMeta.DateTag.TryParse(args[i], out dt))
+                                {
+                                    Console.WriteLine($"Invalid value for -setDate '{args[i]}'.");
+                                    s_commandLineError = true;
+                                    break;
+                                }
+                                photoFinisher.SetDateTo = dt;
+                            }
                             break;
 
                         case "-settimezone":

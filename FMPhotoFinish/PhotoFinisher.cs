@@ -58,6 +58,11 @@ namespace FMPhotoFinish
         public bool Move { get; set; }
 
         /// <summary>
+        /// Sets the Date to the specified value
+        /// </summary>
+        public FileMeta.DateTag SetDateTo { get; set; }
+
+        /// <summary>
         /// Sets the timezone to the specified value while keeping the local time the same.
         /// </summary>
         /// <remarks>

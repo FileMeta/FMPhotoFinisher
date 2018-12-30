@@ -34,11 +34,22 @@ namespace FileMeta
 
         #region Constants
 
-        public const int MinPrecision = 4;
-        public const int MaxPrecision = 21;
+        public const int PrecisionMin = 4;
+        public const int PrecisionYear = 4;
+        public const int PrecisionMonth = 6;
+        public const int PrecisionDay = 8;
+        public const int PrecisionHour = 10;
+        public const int PrecisionMinute = 12;
+        public const int PrecisionSecond = 14;
+        public const int PrecisionMillisecond = 17;
+        public const int PrecisionMicrosecond = 20;
+        public const int PrecisionTick = 21;
+        public const int PrecisionMax = 21;
         public static readonly DateTime ZeroDate = new DateTime(0L);
 
         const long c_ticksPerSecond = 10000000;
+        const long c_ticksPerMillisecond = 10000;
+        const long c_ticksPerMicrosecond = 10;
 
         #endregion Constants
 
@@ -85,37 +96,37 @@ namespace FileMeta
 
             if (!int.TryParse(dateTag.Substring(0, 4), out year)
                 || year < 1 || year > 9999) return false;
-            int precision = 4; // year
+            int precision = PrecisionYear;
             pos = 4;
             if (dateTag.Length > 5 && dateTag[4] == '-')
             {
                 if (!int.TryParse(dateTag.Substring(5, 2), out month)
                     || month < 1 || month > 12) return false;
-                precision = 6; // month
+                precision = PrecisionMonth;
                 pos = 7;
                 if (dateTag.Length > 8 && dateTag[7] == '-')
                 {
                     if (!int.TryParse(dateTag.Substring(8, 2), out day)
                         || day < 1 || day > 31) return false;
-                    precision = 8; // day
+                    precision = PrecisionDay;
                     pos = 10;
                     if (dateTag.Length > 11 && (dateTag[10] == 'T' || dateTag[10] == ' ')) // Even though W3CDTF and ISO 8601 specify 'T' separating date and time, tolerate a space as an alternative.
                     {
                         if (!int.TryParse(dateTag.Substring(11, 2), out hour)
                             || hour < 0 || hour > 23) return false;
-                        precision = 10; // hour
+                        precision = PrecisionHour;
                         pos = 13;
                         if (dateTag.Length > 14 && dateTag[13] == ':')
                         {
                             if (!int.TryParse(dateTag.Substring(14, 2), out minute)
                                 || minute < 0 || minute > 59) return false;
-                            precision = 12; // minute
+                            precision = PrecisionMinute;
                             pos = 16;
                             if (dateTag.Length > 17 && dateTag[16] == ':')
                             {
                                 if (!int.TryParse(dateTag.Substring(17, 2), out second)
                                     || second < 0 || second > 59) return false;
-                                precision = 14; // second
+                                precision = PrecisionSecond;
                                 pos = 19;
                                 if (dateTag.Length > 20 && dateTag[19] == '.')
                                 {
@@ -124,9 +135,9 @@ namespace FileMeta
                                     while (pos < dateTag.Length && char.IsDigit(dateTag[pos]))
                                         ++pos;
 
-                                    precision = 14 + (pos - anchor);
-                                    if (precision > MaxPrecision)
-                                        precision = MaxPrecision;
+                                    precision = PrecisionSecond + (pos - anchor);
+                                    if (precision > PrecisionMax)
+                                        precision = PrecisionMax;
 
                                     double d;
                                     if (!double.TryParse(dateTag.Substring(anchor, pos - anchor), out d)) return false;
@@ -155,6 +166,29 @@ namespace FileMeta
             result = new DateTag(new DateTime(year, month, day, hour, minute, second, dtk).AddTicks(ticks),
                 timezone, precision);
             return true;
+        }
+
+        /// <summary>
+        /// Detects sub-second precision from a <see cref="DateTime"/> value;
+        /// </summary>
+        /// <param name="dt">The value on which to detect precision.</param>
+        /// <returns>A precision value betweein <see cref="PrecisionSecond"/> and <see cref="PrecisionTick"/> inclusive.</returns>
+        /// <remarks>
+        /// <para>Detects the sub-second precision based on number of zero digits after the decimal
+        /// point. Value will be <see cref="PrecisionSecond"/> (14), <see cref="PrecisionMillisecond"/> (18),
+        /// <see cref="PrecisionMicrosecond"/> (20), or <see cref="PrecisionTick"/> (21).
+        /// </para>
+        /// <para>Essentially this simply suppresses trailing zeros after the decimal point.</para>
+        /// </remarks>
+        public static int DetectPrecision(DateTime dt)
+        {
+            if (dt.Ticks % c_ticksPerSecond == 0L)
+                return PrecisionSecond;
+            if (dt.Ticks % c_ticksPerMillisecond == 0L)
+                return PrecisionMillisecond;
+            if (dt.Ticks % c_ticksPerMicrosecond == 0L)
+                return PrecisionMicrosecond;
+            return PrecisionTick;
         }
 
         #endregion
@@ -186,13 +220,72 @@ namespace FileMeta
 
         #region Constructor and Methods
 
-        public DateTag(DateTime date, TimeZoneTag timeZone, int precision)
+        /// <summary>
+        /// Constructs a DateTag from constituent values
+        /// </summary>
+        /// <param name="date">A <see cref="DateTime"/> value.</param>
+        /// <param name="timeZone">A <see cref="TimeZoneTag"/> value or null if unknown.</param>
+        /// <param name="precision">Precision in terms of significant digits. If zero
+        /// then set to maximum (<see cref="PrecisionMax"/>).</param>
+        /// <remarks>
+        /// <para>If timeZone is null, the timezone will be set to <see cref="TimeZoneTag.ForceLocal"/>
+        /// if the <paramref name="date"/> <see cref="DateTime.Kind"/> is <see cref="DateTimeKind.Local"/>,
+        /// to <see cref="TimeZoneTag.ForceUtc"/> if <see cref="DateTime.Kind"/> is <see cref="DateTimeKind.Utc"/>,
+        /// and to <see cref="TimeZoneTag.Unknown"/> if <see cref="DateTime.Kind"/> is <see cref="DateTimeKind.Unspecified"/>.
+        /// </para>
+        /// <para>If precision is zero, the precision is detected by the number of trailing zeros
+        /// after the seconds decimal point. The lowest precision detected is <see cref="PrecisionSecond"/>.
+        /// See <see cref="DetectPrecision(DateTime)"/>.
+        /// </para>
+        /// </remarks>
+        public DateTag(DateTime date, TimeZoneTag timeZone = null, int precision = 0)
         {
+            // Default the timezone value if needed.
+            if (TimeZoneTag.IsNullOrUnknown(timeZone))
+            {
+                switch (date.Kind)
+                {
+                    case DateTimeKind.Local:
+                        timeZone = TimeZoneTag.ForceLocal;
+                        break;
+
+                    case DateTimeKind.Utc:
+                        timeZone = TimeZoneTag.ForceUtc;
+                        break;
+
+                    default:
+                        timeZone = TimeZoneTag.Unknown;
+                        break;
+                }
+            }
+
+            // Change date to a compatible timezone (does nothing if already compatible).
+            else
+            {
+                switch (timeZone.Kind)
+                {
+                    case TimeZoneKind.Normal:
+                    case TimeZoneKind.ForceLocal:
+                        date = timeZone.ToLocal(date);
+                        break;
+
+                    case TimeZoneKind.ForceUtc:
+                        date = timeZone.ToUtc(date);
+                        break;
+
+                    default:
+                        date = new DateTime(date.Ticks, DateTimeKind.Unspecified);
+                        break;
+                }
+            }
+
+            // Limit precision to compatible range
+            if (precision > PrecisionMax) precision = PrecisionMax;
+            if (precision < PrecisionMin) precision = DetectPrecision(date);
+            
+
             Date = date;
             TimeZone = timeZone;
-
-            if (precision > MaxPrecision) precision = MaxPrecision;
-            if (precision < MinPrecision) precision = MinPrecision;
             Precision = precision;
         }
 

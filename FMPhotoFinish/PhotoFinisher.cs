@@ -213,7 +213,7 @@ namespace FMPhotoFinish
                     bool hasCreationDate = mdf.DeterimineCreationDate();
                     if (hasCreationDate)
                     {
-                        OnProgressReport($"   Date: {mdf.CreationDate.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)} ({mdf.CreationDate.Kind}) from {mdf.CreationDateSource}.");
+                        OnProgressReport($"   Date: {mdf.CreationDate} ({mdf.CreationDate.Date.Kind}) from {mdf.CreationDateSource}.");
                     }
 
                     bool hasTimezone = mdf.DetermineTimezone();
@@ -242,6 +242,12 @@ namespace FMPhotoFinish
                         }
                     }
 
+                    if (SetDateTo != null)
+                    {
+                        mdf.SetDate(SetDateTo);
+                        OnProgressReport($"   Date set to: {SetDateTo}");
+                    }
+
                     if (SetTimezoneTo != null)
                     {
                         bool dstActive;
@@ -252,8 +258,10 @@ namespace FMPhotoFinish
                         else if (mdf.SetTimezone(SetTimezoneTo, out dstActive))
                         {
                             OnProgressReport($"   Timezone set to: {mdf.Timezone} {(dstActive ? "(DST)" : "(Standard)")}");
-                            var localCreationDate = mdf.Timezone.ToLocal(mdf.CreationDate);
-                            OnProgressReport($"   Date: {localCreationDate.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)} (Local)");
+                            // Change to unknown date to supporess timezone part when rendering
+                            var localDate = mdf.CreationDate;
+                            localDate = new FileMeta.DateTag(localDate.Date, FileMeta.TimeZoneTag.Unknown, localDate.Precision);
+                            OnProgressReport($"   Date: {localDate} (Local)");
                         }
                         else
                         {
@@ -275,8 +283,10 @@ namespace FMPhotoFinish
                         else if (mdf.ChangeTimezone(ChangeTimezoneTo, out dstActive))
                         {
                             OnProgressReport($"   Timezone changed to: {mdf.Timezone} {(dstActive ? "(DST)" : "(Standard)")}");
-                            var localCreationDate = mdf.Timezone.ToLocal(mdf.CreationDate);
-                            OnProgressReport($"   Date: {localCreationDate.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)} (Local)");
+                            // Change to unknown date to supporess timezone part when rendering
+                            var localDate = mdf.CreationDate;
+                            localDate = new FileMeta.DateTag(localDate.Date, FileMeta.TimeZoneTag.Unknown, localDate.Precision);
+                            OnProgressReport($"   Date: {localDate} (Local)");
                         }
                         else
                         {

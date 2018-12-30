@@ -30,6 +30,7 @@ namespace FMPhotoFinish
         const string c_m4aExt = ".m4a";
 
         const string c_timezoneKey = "timezone";
+        const string c_datePrecisionKey = "datePrecision";
         const string c_makeKey = "make";
         const string c_modelKey = "model";
 
@@ -229,8 +230,9 @@ namespace FMPhotoFinish
 
         // Metatag values from Property System Keywords
         TimeZoneTag m_mtTimezone;
+        int m_mtDatePrecision; // Zero means no value
 
-        // Valies from IsomCoreMetadata
+        // Values from IsomCoreMetadata
         DateTime? m_isomCreationTime;
 
         // Values from ExifTool
@@ -241,6 +243,7 @@ namespace FMPhotoFinish
         bool m_updateMetadata = false; // Metadata should be updated upon disposal
         DateTime? m_creationDate;
         TimeZoneTag m_timezone;
+        int m_datePrecision;
         string m_make;
         string m_model;
 
@@ -281,12 +284,24 @@ namespace FMPhotoFinish
                 metaTagSet.LoadKeywords((string[])propstore.GetValue(PropertyKeys.Keywords));
                 {
                     string value;
+
+                    // Timezone
                     TimeZoneTag tz;
                     if (metaTagSet.MetaTags.TryGetValue(c_timezoneKey, out value)
                         && TimeZoneTag.TryParse(value, out tz))
                     {
                         m_mtTimezone = tz;
                     }
+
+                    // Date precision
+                    int precision;
+                    if (metaTagSet.MetaTags.TryGetValue(c_datePrecisionKey, out value)
+                        && int.TryParse(value, out precision)
+                        && precision >= DateTag.PrecisionMin && precision <= DateTag.PrecisionMax)
+                    {
+                        m_mtDatePrecision = precision;
+                    }
+
                 }
             }
 
@@ -375,15 +390,18 @@ namespace FMPhotoFinish
         public DateTime? OriginalDateModified { get; set; }
         public int Orientation { get; private set; }
 
-        public DateTime CreationDate
+        public DateTag CreationDate
         {
-            get { return m_creationDate ?? m_psDateTaken ?? m_psDateEncoded ?? m_isomCreationTime ?? m_etDateTimeOriginal ?? m_fsDateCreated; }
-            set
+            get
             {
-                m_creationDate = value;
-                CreationDateSource = "Explicit";
-                m_updateMetadata = true;
+                DateTime date = m_creationDate ?? m_psDateTaken ?? m_psDateEncoded ?? m_isomCreationTime ?? m_etDateTimeOriginal ?? m_fsDateCreated;
+                return new DateTag(date, m_timezone);   // If timezone has not yet been determined, the constructor fills in a default value.
             }
+        }
+
+        public int DatePrecision
+        {
+            get { return (m_datePrecision > 0) ? m_datePrecision : m_mtDatePrecision; }
         }
 
         public string CreationDateSource { get; private set; }
@@ -391,12 +409,6 @@ namespace FMPhotoFinish
         public TimeZoneTag Timezone
         {
             get { return m_timezone ?? m_mtTimezone ?? m_etTimezone ?? TimeZoneTag.Unknown; }
-            set
-            {
-                m_timezone = value;
-                TimezoneSource = "Explicit";
-                m_updateMetadata = true;
-            }
         }
 
         public string TimezoneSource { get; private set; }
@@ -439,6 +451,12 @@ namespace FMPhotoFinish
         /// <returns>True if the date was successfully determined. Otherwise false.</returns>
         public bool DeterimineCreationDate()
         {
+            // First, determine the precision if not already set
+            if (m_datePrecision == 0 && m_mtDatePrecision != 0)
+            {
+                m_datePrecision = m_mtDatePrecision;
+            }
+
             // We have lots of dates to work from, take them in priority order
             // Note that the reason they are named inconsistently is to match, as closely as reasonable, to the
             // field names in the originating specificaitons or sources.
@@ -630,6 +648,16 @@ namespace FMPhotoFinish
             return Transcode(reporter);
         }
 
+        public void SetDate(DateTag date)
+        {
+            m_creationDate = date.Date;
+            m_timezone = date.TimeZone;
+            m_datePrecision = date.Precision;
+            m_updateMetadata = true;
+            CreationDateSource = "Set";
+            TimezoneSource = "Set";
+        }
+
         public bool SetTimezone(TimeZoneInfo tzi, out bool dstActive)
         {
             // If no creationDate, do nothing.
@@ -651,6 +679,7 @@ namespace FMPhotoFinish
 
             // When metadata is committed, m_creationDate will be stored in either local or UTC according to the file type.
             m_updateMetadata = true;
+            TimezoneSource = "Set";
 
             return true;
         }
@@ -673,6 +702,7 @@ namespace FMPhotoFinish
 
             // When metadata is committed, m_creationDate will be stored in either local or UTC according to the file type.
             m_updateMetadata = true;
+            TimezoneSource = "Set";
 
             return true;
         }

@@ -14,8 +14,8 @@ using System.Text;
  *  preserve metadata on transcode and store updated metadata
  *  -setTimezone
  *  -changeTimezone
- * Next:
  *  -setDate
+ * Next:
  *  -updateFileDate (dateCreated is not preserved when copying across volumes, but dateModified should reflect most recent change to metadata)
  *  -sort
  *  -st

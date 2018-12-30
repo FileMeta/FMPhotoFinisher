@@ -395,7 +395,7 @@ namespace FMPhotoFinish
             get
             {
                 DateTime date = m_creationDate ?? m_psDateTaken ?? m_psDateEncoded ?? m_isomCreationTime ?? m_etDateTimeOriginal ?? m_fsDateCreated;
-                return new DateTag(date, m_timezone);   // If timezone has not yet been determined, the constructor fills in a default value.
+                return new DateTag(date, m_timezone, m_datePrecision);   // If timezone has not yet been determined, the constructor fills in a default value.
             }
         }
 
@@ -766,6 +766,8 @@ namespace FMPhotoFinish
 
                     if (m_timezone != null)
                         metaTagSet.MetaTags[c_timezoneKey] = m_timezone.ToString();
+                    if (m_datePrecision >= DateTag.PrecisionMin)
+                        metaTagSet.MetaTags[c_datePrecisionKey] = m_datePrecision.ToString();
                     if (!string.IsNullOrEmpty(m_make))
                         ps.SetValue(PropertyKeys.Make, m_make);
                     if (!string.IsNullOrEmpty(m_model))

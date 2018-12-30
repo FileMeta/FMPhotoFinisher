@@ -341,6 +341,13 @@ Timezones:
                                     s_commandLineError = true;
                                     break;
                                 }
+
+                                // If timezone isn't specified, use the local timezone.
+                                if (dt.TimeZone.Kind == FileMeta.TimeZoneKind.ForceLocal || dt.TimeZone.Kind == FileMeta.TimeZoneKind.Unknown)
+                                {
+                                    var tzt = new FileMeta.TimeZoneTag(TimeZoneInfo.Local.GetUtcOffset(dt.Date), FileMeta.TimeZoneKind.Normal);
+                                    dt = new FileMeta.DateTag(dt.Date, tzt, dt.Precision);
+                                }
                                 photoFinisher.SetDateTo = dt;
                             }
                             break;

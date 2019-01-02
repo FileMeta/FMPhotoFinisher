@@ -15,9 +15,9 @@ using System.Text;
  *  -setTimezone
  *  -changeTimezone
  *  -setDate
+ *  -setUUID
+ *  -saveOriginalFn
  * Next:
- *  add uuid for each image (existing property? System.Image.ImageID? (No, ImageID is read-only. Either custom property or don't do it)
- *  Save original filename.
  *  -sort
  *  -sDCF
  * --- Ready to begin using
@@ -118,6 +118,14 @@ Operations:
   -transcode       Transcode video and audio files to the preferred format
                    which is .mp4 for video and .m4a for audio. Also renames
                    .jpeg files to .jpg.
+
+  -saveOriginalFn  Save the original filename in a custom metaTag stored
+                   in the comments property. If the property already exists,
+                   it is preserved.
+
+  -setUUID         Set a unique UUID as a custom metaTag stored in the
+                   comments property. If the property already exists, it is
+                   preserved.
 
   -setDate <dateTime>  Set the dateCreated/dateTaken value in the metadata
                    to the specified date and time. (See details on format
@@ -327,6 +335,15 @@ Timezones:
 
                         case "-orderednames":
                             photoFinisher.SetOrderedNames = true;
+                            break;
+
+                        case "-saveoriginalfn":
+                        case "-saveoriginalfilename":
+                            photoFinisher.SaveOriginalFilaname = true;
+                            break;
+
+                        case "-setuuid":
+                            photoFinisher.SetUuid = true;
                             break;
 
                         case "-autorot":

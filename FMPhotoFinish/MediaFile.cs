@@ -31,8 +31,10 @@ namespace FMPhotoFinish
 
         const string c_timezoneKey = "timezone";
         const string c_datePrecisionKey = "datePrecision";
-        const string c_makeKey = "make";
-        const string c_modelKey = "model";
+        const string c_originalFilenameKey = "originalFilename";
+        const string c_uuidKey = "uuid";
+        //const string c_makeKey = "make";
+        //const string c_modelKey = "model";
 
         #region Static Members
 
@@ -217,9 +219,9 @@ namespace FMPhotoFinish
 
         string m_filepath;
         MediaType m_mediaType;
-        string m_originalFilename;      // Filename when process started.
 
         // File System Values (In local time)
+        string m_fsOriginalFilename;      // Filename when process started.
         DateTime m_fsDateCreated;
         DateTime m_fsDateModified;
 
@@ -246,11 +248,13 @@ namespace FMPhotoFinish
         int m_datePrecision;
         string m_make;
         string m_model;
+        string m_originalFilename;
+        Guid m_uuid;
 
         public MediaFile(string filepath, string originalFilename)
         {
             m_filepath = filepath;
-            m_originalFilename = originalFilename ?? Path.GetFileName(filepath);
+            m_fsOriginalFilename = originalFilename ?? Path.GetFileName(filepath);
 
             string ext = Path.GetExtension(filepath).ToLowerInvariant();
             if (!s_mediaExtensions.TryGetValue(ext, out m_mediaType))
@@ -300,6 +304,21 @@ namespace FMPhotoFinish
                         && precision >= DateTag.PrecisionMin && precision <= DateTag.PrecisionMax)
                     {
                         m_mtDatePrecision = precision;
+                    }
+
+                    // Original Filename
+                    if (metaTagSet.MetaTags.TryGetValue(c_originalFilenameKey, out value)
+                        && !string.IsNullOrEmpty(value))
+                    {
+                        m_originalFilename = value;
+                    }
+
+                    // UUID
+                    Guid uuid;
+                    if (metaTagSet.MetaTags.TryGetValue(c_uuidKey, out value)
+                        && Guid.TryParse(value, out uuid))
+                    {
+                        m_uuid = uuid;
                     }
 
                 }
@@ -428,7 +447,7 @@ namespace FMPhotoFinish
         public bool SetOrderedName()
         {
             string newName;
-            if (RenamePattern.TryGetNewName(s_renamePatterns, m_originalFilename, out newName))
+            if (RenamePattern.TryGetNewName(s_renamePatterns, m_fsOriginalFilename, out newName))
             {
                 // Create the new path and make it unique
                 string newPath = Path.Combine(Path.GetDirectoryName(m_filepath), newName);
@@ -492,7 +511,7 @@ namespace FMPhotoFinish
             // From file naming convention
             {
                 DateTime dt;
-                if (TryParseDateTimeFromFilename(m_originalFilename, out dt))
+                if (TryParseDateTimeFromFilename(m_fsOriginalFilename, out dt))
                 {
                     m_creationDate = dt;
                     CreationDateSource = "Filename";
@@ -569,7 +588,7 @@ namespace FMPhotoFinish
              * the timezone. */
             DateTime dt;
             if (m_isomCreationTime.HasValue
-                && TryParseDateTimeFromFilename(m_originalFilename, out dt)
+                && TryParseDateTimeFromFilename(m_fsOriginalFilename, out dt)
                 && TryCalcTimezoneFromMatch(m_isomCreationTime.Value, dt, m_psDuration, out tzMinutes))
             {
                 m_timezone = new TimeZoneTag(tzMinutes, tzMinutes == 0 ? TimeZoneKind.ForceLocal : TimeZoneKind.Normal);
@@ -707,34 +726,66 @@ namespace FMPhotoFinish
             return true;
         }
 
+        /// <summary>
+        /// Save the original filename in custom metadata field.
+        /// </summary>
+        /// <returns>True if original filename safed. False if original filename
+        /// is already stored.</returns>
+        public bool SaveOriginalFilename()
+        {
+            if (!string.IsNullOrEmpty(m_originalFilename)) return false;
+
+            Debug.Assert(!string.IsNullOrEmpty(m_fsOriginalFilename));
+            m_originalFilename = m_fsOriginalFilename;
+            m_updateMetadata = true;
+            return true;
+        }
+
+        /// <summary>
+        /// Set a uuid in custom metadata field.
+        /// </summary>
+        /// <returns>True if stored a new UUID. False if UUID already exists.</returns>
+        public bool SetUuid()
+        {
+            if (!Guid.Empty.Equals(m_uuid)) return false;
+
+            m_uuid = Guid.NewGuid();
+            m_updateMetadata = true;
+            return true;
+        }
+
+        /// <summary>
+        /// Save any metadata fields that have changed.
+        /// </summary>
+        /// <returns>True if metadata updated. False if no metadata changes to save.</returns>
         public bool CommitMetadata()
         {
-            if (!m_updateMetadata) return true; // Nothing to update
+            if (!m_updateMetadata) return false; // Nothing to update
+
+            if (m_mediaType == MediaType.Unsupported)
+                throw new ApplicationException("Cannot update metadata on unsupported media type.");
+
+            // If audio or video, attempt to use Isom to update creationDate
+            bool creationDateStoredByIsom = false;
+            if (m_creationDate.HasValue && (m_mediaType == MediaType.Video || m_mediaType == MediaType.Audio))
+            {
+                var isom = IsomCoreMetadata.TryOpen(m_filepath, true);
+                if (isom != null)
+                {
+                    using (isom)
+                    {
+                        // Convert to UTC (this does nothing if it is already UTC.
+                        var dt = (m_timezone != null) ? m_timezone.ToUtc(m_creationDate.Value) : m_creationDate.Value.ToUniversalTime();
+                        isom.CreationTime = dt;
+                        isom.ModificationTime = dt;
+                        isom.Commit();
+                    }
+                    creationDateStoredByIsom = true;
+                }
+            }
 
             try
             {
-                if (m_mediaType == MediaType.Unsupported)
-                    throw new ApplicationException("Cannot update metadata on unsupported media type.");
-
-                // If audio or video, attempt to use Isom to update creationDate
-                bool creationDateStoredByIsom = false;
-                if (m_creationDate.HasValue && (m_mediaType == MediaType.Video || m_mediaType == MediaType.Audio))
-                {
-                    var isom = IsomCoreMetadata.TryOpen(m_filepath, true);
-                    if (isom != null)
-                    {
-                        using (isom)
-                        {
-                            // Convert to UTC (this does nothing if it is already UTC.
-                            var dt = (m_timezone != null) ? m_timezone.ToUtc(m_creationDate.Value) : m_creationDate.Value.ToUniversalTime();
-                            isom.CreationTime = dt;
-                            isom.ModificationTime = dt;
-                            isom.Commit();
-                        }
-                        creationDateStoredByIsom = true;
-                    }
-                }
-
                 using (var ps = PropertyStore.Open(m_filepath, true))
                 {
                     // Prep the metatags with existing values
@@ -767,6 +818,10 @@ namespace FMPhotoFinish
                         metaTagSet.MetaTags[c_timezoneKey] = m_timezone.ToString();
                     if (m_datePrecision >= DateTag.PrecisionMin)
                         metaTagSet.MetaTags[c_datePrecisionKey] = m_datePrecision.ToString();
+                    if (!string.IsNullOrEmpty(m_originalFilename))
+                        metaTagSet.MetaTags[c_originalFilenameKey] = m_originalFilename;
+                    if (!m_uuid.Equals(Guid.Empty))
+                        metaTagSet.MetaTags[c_uuidKey] = m_uuid.ToString("D");
                     if (!string.IsNullOrEmpty(m_make))
                         ps.SetValue(PropertyKeys.Make, m_make);
                     if (!string.IsNullOrEmpty(m_model))
@@ -784,8 +839,8 @@ namespace FMPhotoFinish
             }
             catch (Exception err)
             {
-                Debug.WriteLine(err.ToString());
-                return false;
+                // Translate error message
+                throw new ApplicationException("Error storing metadata - file may be corrupt.", err);
             }
 
             m_updateMetadata = false;

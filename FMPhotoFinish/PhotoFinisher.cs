@@ -90,6 +90,16 @@ namespace FMPhotoFinish
         /// </summary>
         public bool AutoSort { get; set; }
 
+        /// <summary>
+        /// Save the original filename in a custom metaTag (if it hasn't already been stored).
+        /// </summary>
+        public bool SaveOriginalFilaname { get; set; }
+
+        /// <summary>
+        /// Set a UUID in a custom metatag (if one doesn't already exist)
+        /// </summary>
+        public bool SetUuid { get; set; }
+
         #endregion Operations
 
         /// <summary>
@@ -210,6 +220,22 @@ namespace FMPhotoFinish
                         OnProgressReport("   Rename to: " + Path.GetFileName(mdf.Filepath));
                     }
 
+                    if (SaveOriginalFilaname)
+                    {
+                        if (mdf.SaveOriginalFilename())
+                        {
+                            OnProgressReport("   Original filename saved.");
+                        }
+                    }
+
+                    if (SetUuid)
+                    {
+                        if (mdf.SetUuid())
+                        {
+                            OnProgressReport("   Set UUID.");
+                        }
+                    }
+
                     bool hasCreationDate = mdf.DeterimineCreationDate();
                     if (hasCreationDate)
                     {
@@ -294,9 +320,9 @@ namespace FMPhotoFinish
                         }
                     }
 
-                    if (!mdf.CommitMetadata())
+                    if (mdf.CommitMetadata())
                     {
-                        OnProgressReport("   ERROR: Failed to update metadata. File may be invalid.");
+                        OnProgressReport("   Metadata updated.");
                     }
                 }
             }

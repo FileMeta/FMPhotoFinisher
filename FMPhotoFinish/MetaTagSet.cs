@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Diagnostics;
 
 namespace FileMeta
 {
@@ -17,7 +19,8 @@ namespace FileMeta
     /// <para>   &subject=MetaTag_Format</para>
     /// <para>   &date=2018-12-17T21:22:05-06:00</para>
     /// <para>Regular format definition.</para>
-    /// <para>A metatag starts with an ampersand - just as a hashtag starts with the hash symbol.</para>
+    /// <para>A metatag starts with an ampersand - just as a hashtag starts with the hash symbol.
+    /// </para>
     /// <para>Next comes the name which follows the same standard as a hashtag - it must be composed
     /// of letters, numbers, and the underscore character. Rigorous implementations should use the
     /// unicode character sets. Specifically Unicode categories: Ll, Lu, Lt, Lo, Lm, Mn, Nd, Pc. For
@@ -39,6 +42,9 @@ namespace FileMeta
     /// </para>
     /// <para>The name IS NOT encoded. Valid names are simply limited to the specified character set.
     /// </para>
+    /// <para>This implementation does not handle multiple values for the same key. That's consistent
+    /// with the overall Windows Property System.
+    /// </para>
     /// </remarks>
     class MetaTagSet
     {
@@ -51,13 +57,30 @@ namespace FileMeta
            =       The equals sign
            [^\s&]. Zero or more non-whitespace and non-ampersand characters.
         */
-        static Regex s_rxMetatag = new Regex(
+
+        // Matches a metatag that composes the whole string
+        static Regex s_rxSingleMetatag = new Regex(
             @"^&(\w+)=([^\s&]*)$",
             RegexOptions.CultureInvariant);
 
+        // Matches metatags that are embedded in a potentially longer string.
+        // Includes any leading whitespace in the matched string.
+        static Regex s_rxEmbeddedMetatag = new Regex(
+            @"&(\w+)=([^\s&]*)",
+            RegexOptions.CultureInvariant);
+
+        /// <summary>
+        /// Attempt to parse one metatag that composes the whole string
+        /// </summary>
+        /// <param name="s">The string to parse as a metatag.</param>
+        /// <param name="key">The parsed metagag key.</param>
+        /// <param name="value">The parsed value.</param>
+        /// <returns>True if the string is a valid metatag that was successfully parsed.</returns>
+        /// <remarks>To be a valid metatag, the string must start with ampersand and must not have
+        /// any embedded whitespace.</remarks>
         public static bool TryParseMetatag(string s, out string key, out string value)
         {
-            var match = s_rxMetatag.Match(s);
+            var match = s_rxSingleMetatag.Match(s);
             if (!match.Success)
             {
                 key = null;
@@ -70,11 +93,53 @@ namespace FileMeta
             return true;
         }
 
-        public static string FormatMetatag(string key, string value)
+        /// <summary>
+        /// Parse all metatags embedded in a string.
+        /// </summary>
+        /// <param name="s">The string that may contain metatags.</param>
+        /// <returns>An IEnumerator that will list the metatags as <see cref="KeyValuePair{String, String}"/>.</returns>
+        /// <remarks>
+        /// <para>Use this method to retrieve a set of metatags embedded in a longer string such as the
+        /// comments.
+        /// </para>
+        /// </remarks>
+        public static IEnumerable<KeyValuePair<string, string> > ParseMetatags(string s)
+        {
+            return new MetatagEnumerable(s);
+        }
+
+        /// <summary>
+        /// Formats a key and value into a metatag.
+        /// </summary>
+        /// <param name="key">The key.</param>
+        /// <param name="value">The value</param>
+        /// <returns>A string containing the properly formatted metatag key and value.</returns>
+        public static string MetatagFormat(string key, string value)
         {
             return $"&{key}={MetatagEncode(value)}";
         }
 
+        /// <summary>
+        /// Formats a KeyValuePair into a metatag.
+        /// </summary>
+        /// <param name="pair">A <see cref="KeyValuePair{string, string}"/></param>
+        /// <returns>The properly formatted metatag.</returns>
+        public static string FormatMetatag(KeyValuePair<string, string> pair)
+        {
+            return $"&{pair.Key}={MetatagEncode(pair.Value)}";
+        }
+
+        /// <summary>
+        /// Encode a metatag value
+        /// </summary>
+        /// <param name="s">The value to encode.</param>
+        /// <returns>The encoded value.</returns>
+        /// <remarks>
+        /// <para>The value portion of a metatag may not contain whitespace or the ampersand. Space characters
+        /// are encoded as an underscore. The ampersand, percent, underscore, and all other whitespace characters
+        /// are percent encoded similar to URL query strings.
+        /// </para>
+        /// </remarks>
         public static string MetatagEncode(string s)
         {
             var sb = new StringBuilder();
@@ -98,6 +163,15 @@ namespace FileMeta
             return sb.ToString();
         }
 
+        /// <summary>
+        /// Decodes the value portion of a metatag.
+        /// </summary>
+        /// <param name="s">A metatag-encoded string to be decoded.</param>
+        /// <returns>The decoded string.</returns>
+        /// <remarks>
+        /// <para>See <see cref="MetatagEncode"/> for a summary of encoding rules.
+        /// </para>
+        /// </remarks>
         public static string MetatagDecode(string s)
         {
             var sb = new StringBuilder();
@@ -132,16 +206,10 @@ namespace FileMeta
 
         #endregion Public Static Members
 
-        HashSet<string> m_keywords = new HashSet<string>();
         Dictionary<string, string> m_metaTags = new Dictionary<string, string>();
 
         #region Properties
 
-        /// <summary>
-        /// Conventional keywords in the keyword set
-        /// </summary>
-        public ISet<string> Keywords { get { return m_keywords; } }
-        
         /// <summary>
         /// The metatags stored in a keyword set
         /// </summary>
@@ -153,62 +221,166 @@ namespace FileMeta
 
         #endregion Methods
 
-        public void LoadKeywords(string[] keywords)
+        /// <summary>
+        /// Load the metatags from a string - such as a comment.
+        /// </summary>
+        /// <param name="s">The string from which to load the metatags.</param>
+        public void LoadMetatags(string s)
         {
-            if (keywords != null)
+            foreach (var pair in ParseMetatags(s))
             {
-                foreach (string s in keywords)
-                {
-                    if (string.IsNullOrEmpty(s)) continue;
-                    string key, value;
-                    if (TryParseMetatag(s, out key, out value))
-                    {
-                        m_metaTags[key] = value;
-                    }
-                    else
-                    {
-                        m_keywords.Add(s);
-                    }
-                }
+                if (string.IsNullOrEmpty(pair.Key)) continue;
+                m_metaTags[pair.Key] = pair.Value;
             }
         }
 
-        public string[] ToKeywords()
+        public string AddMetatagsToString(string s)
         {
-            var list = new List<string>(m_keywords.Count + m_metaTags.Count);
+            if (s == null) s = string.Empty;
 
-            // Load the keywords into a list
-            foreach (var k in m_keywords)
+            var tagsEntered = new HashSet<string>();
+            var sb = new StringBuilder();
+            // Process existing string, suppressing any existing metatags
+            // that don't match new values.
+            int p = 0;
+            foreach(Match match in s_rxEmbeddedMetatag.Matches(s))
             {
-                if (!string.IsNullOrEmpty(k))
+                // Transfer any existing text to the stringbuilder
+                sb.Append(s, p, match.Index - p);
+                p = match.Index;
+
+                // Process the match.
+                string key = match.Groups[1].Value;
+                string value = MetatagDecode(match.Groups[2].Value);
+                string newValue;
+
+                // If a matching tag has already been processed, suppress this instance
+                if (tagsEntered.Contains(key))
                 {
-                    list.Add(k);
+                    p = match.Index + match.Length;
+
+                    // Trim any leading whitespace (trailing on the stringbuilder)
+                    while (sb.Length > 0 && char.IsWhiteSpace(sb[sb.Length - 1]))
+                        sb.Length = sb.Length - 1;
+
+                    // If no trailing whitespace, insert one space
+                    if (p < s.Length && !char.IsWhiteSpace(s[p]))
+                    {
+                        sb.Append(' ');
+                    }
+                }
+
+                // Else, if there's a new value for this metatag. Substitute the new one in-place.
+                else if (m_metaTags.TryGetValue(key, out newValue)
+                    && !string.Equals(value, newValue))
+                {
+                    sb.Append(MetatagFormat(key, newValue));
+                    p = match.Index + match.Length;
+                }
+
+                // Else, preserve the existing value for the metatag verbatim.
+                else
+                {
+                    sb.Append(s, p, match.Length);
+                    p += match.Length;
+                }
+
+                tagsEntered.Add(key);
+            }
+
+            // Transfer over any trailing text in the existing string.
+            if (p < s.Length)
+            {
+                sb.Append(s, p, s.Length - p);
+            }
+
+            // Make a list of the remaining tags and sort it.
+            var list = new List<KeyValuePair<string, string>>(m_metaTags.Count - tagsEntered.Count);
+            foreach(var pair in m_metaTags)
+            {
+                if (!tagsEntered.Contains(pair.Key))
+                {
+                    list.Add(pair);
+                }
+            }
+            list.Sort((a, b) => string.Compare(a.Key, b.Key, StringComparison.OrdinalIgnoreCase));
+
+            // Insert the remaining metatags
+            foreach(var pair in list)
+            {
+                // Append a space if needed.
+                // Metatags can be smashed together - this is for human aesthetics.
+                if (sb.Length > 0 && !char.IsWhiteSpace(sb[sb.Length - 1]))
+                    sb.Append(' ');
+
+                sb.Append(FormatMetatag(pair));
+            }
+
+            return sb.ToString();
+        }
+
+        protected class MetatagEnumerable : IEnumerable<KeyValuePair<string, string>>
+        {
+            string m_s;
+
+            public MetatagEnumerable(string s)
+            {
+                m_s = s;
+            }
+
+            public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
+            {
+                return new MetatagParser(m_s);
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return new MetatagParser(m_s);
+            }
+        }
+
+        protected class MetatagParser : IEnumerator<KeyValuePair<string, string>>
+        {
+            MatchCollection m_matches;
+            IEnumerator m_enumerator;
+            public MetatagParser(string s)
+            {
+                if (s == null)
+                    s = string.Empty;
+
+                m_matches = s_rxEmbeddedMetatag.Matches(s);
+                m_enumerator = m_matches.GetEnumerator();
+            }
+
+            public KeyValuePair<string, string> Current
+            {
+                get
+                {
+                    Match match = m_enumerator.Current as Match;
+                    if (match == null) throw new InvalidOperationException();
+                    Debug.Assert(match.Success);
+
+                    return new KeyValuePair<string, string>(match.Groups[1].Value, MetatagDecode(match.Groups[2].Value));
                 }
             }
 
-            // Add the metatags
-            foreach (var pair in m_metaTags)
+            object IEnumerator.Current => throw new NotImplementedException();
+
+            public void Dispose()
             {
-                if (!string.IsNullOrEmpty(pair.Key))
-                {
-                    list.Add(FormatMetatag(pair.Key, pair.Value ?? string.Empty));
-                }
+                m_enumerator = null;
+                m_matches = null;
             }
 
-            // Sort
-            list.Sort(delegate (string a, string b)
+            public bool MoveNext()
             {
-                // Sort metatags after keywords. We already verified that all
-                // keys have at least one character.
-                if (a[0] != b[0])
-                {
-                    if (a[0] == '&') return 1;
-                    if (b[0] == '&') return -1;
-                }
-                return string.CompareOrdinal(a, b);
-            });
+                return m_enumerator.MoveNext();
+            }
 
-            return list.ToArray();
+            public void Reset()
+            {
+                m_enumerator.Reset();
+            }
         }
 
     }

@@ -16,11 +16,13 @@ using System.Text;
  *  -changeTimezone
  *  -setDate
  * Next:
- *  -updateFileDate (dateCreated is not preserved when copying across volumes, but dateModified should reflect most recent change to metadata)
+ *  add uuid for each image (existing property? System.Image.ImageID? (No, ImageID is read-only. Either custom property or don't do it)
+ *  Save original filename.
  *  -sort
- *  -st
  *  -sDCF
- *  add uuid for each image
+ * --- Ready to begin using
+ *  -updateFileDate (dateCreated is not preserved when copying across volumes, but dateModified should reflect most recent change to metadata)
+ *  -st
  *  -shiftDate
  *  Test with no options - should just list values (potential conflict with design principles - figure this out)
  *  Tabular output format option (for later analytics)

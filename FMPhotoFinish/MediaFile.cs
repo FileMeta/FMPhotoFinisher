@@ -281,7 +281,7 @@ namespace FMPhotoFinish
 
                 // Keywords may be used to store custom metadata
                 var metaTagSet = new MetaTagSet();
-                metaTagSet.LoadKeywords((string[])propstore.GetValue(PropertyKeys.Keywords));
+                metaTagSet.LoadMetatags((string)propstore.GetValue(PropertyKeys.Comment));
                 {
                     string value;
 
@@ -739,7 +739,6 @@ namespace FMPhotoFinish
                 {
                     // Prep the metatags with existing values
                     var metaTagSet = new MetaTagSet();
-                    metaTagSet.LoadKeywords((string[])ps.GetValue(PropertyKeys.Keywords));
 
                     // Handle type-specific metadata
                     if (m_mediaType == MediaType.Image)
@@ -773,7 +772,12 @@ namespace FMPhotoFinish
                     if (!string.IsNullOrEmpty(m_model))
                         ps.SetValue(PropertyKeys.Model, m_model);
 
-                    ps.SetValue(PropertyKeys.Keywords, metaTagSet.ToKeywords());
+                    if (metaTagSet.MetaTags.Count > 0)
+                    {
+                        ps.SetValue(PropertyKeys.Comment,
+                            metaTagSet.AddMetatagsToString(
+                                ps.GetValue(PropertyKeys.Comment) as string));
+                    }
 
                     ps.Commit();
                 }
@@ -1028,6 +1032,8 @@ namespace FMPhotoFinish
         public static PROPERTYKEY Duration = new PROPERTYKEY("64440490-4C8B-11D1-8B70-080036B11A03", 3);
         public static PROPERTYKEY Make = new PROPERTYKEY("14b81da1-0135-4d31-96d9-6cbfc9671a99", 271); // System.Photo.CameraManufacturer
         public static PROPERTYKEY Model = new PROPERTYKEY("14b81da1-0135-4d31-96d9-6cbfc9671a99", 272); // System.Photo.CameraModel
+        public static PROPERTYKEY ImageId = new PROPERTYKEY("10DABE05-32AA-4C29-BF1A-63E2D220587F", 100); // System.Image.ImageID
+        public static PROPERTYKEY Comment = new PROPERTYKEY("F29F85E0-4FF9-1068-AB91-08002B27B3D9", 6); // 
     }
 
     /// <summary>

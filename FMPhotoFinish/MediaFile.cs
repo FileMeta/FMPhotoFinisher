@@ -463,6 +463,43 @@ namespace FMPhotoFinish
         }
 
         /// <summary>
+        /// Moves the file to a path based on its creation date.
+        /// </summary>
+        /// <returns>True if successful. False if there is a file by the name of one of the directories in the path.</returns>
+        public bool MoveFileToDatePath(string dstRoot)
+        {
+            if (!m_creationDate.HasValue) throw new ApplicationException("MoveFileToDatePath: CreationDate has not yet been determined.");
+
+            // Get a local dateTime for the file
+            var dt = (m_timezone != null) ? m_timezone.ToLocal(m_creationDate.Value) : m_creationDate.Value.ToLocalTime();
+
+            // Create the directory string year\month\day
+            // This part deliberately uses cultural-sensitive encoding so a system configured for French will use French month and day names.
+            // It also uses Path.Combine for forward and backslash compatibility with non-Windows systems (though there are other dependencies in this app)
+            string dir = Path.Combine(dstRoot, dt.ToString("yyyy"));
+            dir = Path.Combine(dir, dt.ToString("MM MMMM"));
+            dir = Path.Combine(dir, dt.ToString("dd~ddd"));
+
+            // Create the directory (this will handle the whole path if necessary)
+            // Succeeds with no error if the directory already exists
+            try
+            {
+                Directory.CreateDirectory(dir);
+            }
+            catch
+            {
+                return false;
+            }
+
+            // Move the file to the directory
+            string dstPath = Path.Combine(dir, Path.GetFileName(m_filepath));
+            File.Move(m_filepath, dstPath);
+            m_filepath = dstPath;
+
+            return true;
+        }
+
+        /// <summary>
         /// Attempt to determine the date of media files - that is, the date that the event
         /// was recorded. This is the DateTimeOriginal from JPEG EXIF and the creation_date
         /// from .MOV and .MP4 files.

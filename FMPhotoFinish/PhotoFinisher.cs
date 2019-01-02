@@ -324,6 +324,26 @@ namespace FMPhotoFinish
                     {
                         OnProgressReport("   Metadata updated.");
                     }
+
+                    if (AutoSort)
+                    {
+                        if (hasCreationDate)
+                        {
+                            if (mdf.MoveFileToDatePath(DestinationDirectory))
+                            {
+                                fi.Filepath = mdf.Filepath;
+                                OnProgressReport("   AutoSorted to: " + Path.GetDirectoryName(mdf.Filepath));
+                            }
+                            else
+                            {
+                                OnProgressReport("   Existing filename conflicts with autosort path.");
+                            }
+                        }
+                        else
+                        {
+                            OnProgressReport("   No date determined - cannot autosort.");
+                        }
+                    }
                 }
             }
             catch (Exception err)

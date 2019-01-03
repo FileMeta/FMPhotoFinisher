@@ -401,7 +401,7 @@ namespace FMPhotoFinish
 
                     if (Transcode && !mdf.IsPreferredFormat)
                     {
-                        OnProgressReport($"   Transcode to: {mdf.PreferredFormat}");
+                        OnProgressReport($"   Transcode to: {mdf.PreferredFormat} ({mdf.Duration.ToString(@"hh\:mm\:ss")})");
                         if (mdf.TranscodeToPreferredFormat(msg => OnStatusReport(msg)))
                         {
                             fi.Filepath = mdf.Filepath;
@@ -493,7 +493,7 @@ namespace FMPhotoFinish
             }
             catch (Exception err)
             {
-                OnProgressReport($"   Error: {err.Message}");
+                OnProgressReport($"   Error: {err.Message.Trim()}");
             }
         }
 

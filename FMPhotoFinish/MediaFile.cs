@@ -36,6 +36,8 @@ namespace FMPhotoFinish
         //const string c_makeKey = "make";
         //const string c_modelKey = "model";
 
+        static readonly TimeSpan s_timespanZero = new TimeSpan(0);
+
         #region Static Members
 
         static Encoding s_Utf8NoBOM = new UTF8Encoding(false);
@@ -408,6 +410,7 @@ namespace FMPhotoFinish
         public DateTime? OriginalDateCreated { get; set; }
         public DateTime? OriginalDateModified { get; set; }
         public int Orientation { get; private set; }
+        public TimeSpan Duration { get { return m_psDuration ?? s_timespanZero; } }
 
         public DateTag CreationDate
         {

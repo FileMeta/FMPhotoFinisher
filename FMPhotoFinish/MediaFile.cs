@@ -768,6 +768,33 @@ namespace FMPhotoFinish
         }
 
         /// <summary>
+        /// Update the FileSystem dateCreated value to match the metadata.
+        /// </summary>
+        /// <returns>True if the FileSystem dateCreated was updated. False if the date created
+        /// has not been determined and so no update was accomplished.</returns>
+        /// <remarks>
+        /// <para></para>
+        /// </remarks>
+        public bool UpdateFileSystemDate()
+        {
+            // If no creationDate, do nothing.
+            if (!m_creationDate.HasValue) return false;
+
+            DateTime dateUtc;
+            if (m_timezone == null)
+            {
+                dateUtc = m_creationDate.Value.ToUniversalTime();
+            }
+            else
+            {
+                dateUtc = m_timezone.Detach(m_creationDate.Value).ToUniversalTime();
+            }
+
+            File.SetCreationTimeUtc(m_filepath, dateUtc);
+            return true;
+        }
+
+        /// <summary>
         /// Save the original filename in custom metadata field.
         /// </summary>
         /// <returns>True if original filename safed. False if original filename

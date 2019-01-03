@@ -318,6 +318,59 @@ namespace FileMeta
             return new DateTime(date.Ticks - (m_offset * c_ticksPerMinute), DateTimeKind.Utc);
         }
 
+        /// <summary>
+        /// Detaches a <see cref="DateTime"/> that was associated with this TimeZoneTag to be used
+        /// with the system's currently-set timezone. (See remarks.)
+        /// </summary>
+        /// <param name="date">The <see cref="DateTime"/> to detach.</param>
+        /// <returns>The detached DateTime.</returns>
+        /// <remarks>
+        /// <para>The operation of this method depends on <see cref="Kind"/>:
+        /// </para>
+        /// <para><see cref="TimeZoneKind.Normal"/>: If the inbound DateTime is <see cref="DateTimeKind.Utc"/>,
+        /// it is converted to the local timezone using <see cref="UtcOffset"/>. If
+        /// <see cref="DateTimeKind.Local"/> it is returned unchanged.
+        /// </para>
+        /// <para><see cref="TimeZoneKind.ForceLocal"/>: The value is returned with the the time
+        /// unchanged and <see cref="DateTime.Kind"/> set to <see cref="DateTimeKind.Local"/>.
+        /// </para>
+        /// <para><see cref="TimeZoneKind.ForceUtc"/>: The value is returned with the time unchanged
+        /// and <see cref="DateTimeKind"/> set to <see cref="DateTimeKind.Utc"/>.
+        /// </para>
+        /// <para><see cref="TimeZoneKind.Unknown"/>: The value is returned unchanged in any way.
+        /// </para>
+        /// <para>Inblund values with <see cref="DateTimeKind.Unspecified"/> are treated like local time.
+        /// Depending on the circumstances, this may lead to unexpected (though deterministic) results
+        /// so it is not recommended to use DateTime values with unspecified kind.
+        /// </para>
+        /// <para>Since the returned value may be <see cref="DateTimeKind.Utc"/> or <see cref="DateTimeKind.Local"/>
+        /// this is usually combined with <see cref="DateTime.ToLocalTime"/> or <see cref="DateTime.ToUniversalTime"/>
+        /// either of which uses the system's current timezone to convert when necessary. For example:
+        /// </para>
+        /// <code>var detachedTime = timeZoneTag.Detach(attachedTime).ToLocalTime();
+        /// </code>
+        /// </remarks>
+        public DateTime Detach(DateTime date)
+        {
+            if (date.Kind == DateTimeKind.Unspecified)
+                date = DateTime.SpecifyKind(date, DateTimeKind.Local);
+
+            switch (Kind)
+            {
+                case TimeZoneKind.Normal:
+                    return ToLocal(date);
+
+                case TimeZoneKind.ForceLocal:
+                    return DateTime.SpecifyKind(date, DateTimeKind.Local);
+
+                case TimeZoneKind.ForceUtc:
+                    return DateTime.SpecifyKind(date, DateTimeKind.Utc);
+
+                default: // TimeZoneKind.Unknown
+                    return date;
+            }
+        }
+
         #endregion
 
         #region Standard Methods

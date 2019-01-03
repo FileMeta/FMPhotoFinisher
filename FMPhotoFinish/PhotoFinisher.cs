@@ -89,6 +89,11 @@ namespace FMPhotoFinish
         public TimeZoneInfo ChangeTimezoneTo { get; set; }
 
         /// <summary>
+        /// Updates the file system dateCreated value to match the metadata date created.
+        /// </summary>
+        public bool UpdateFileSystemDate { get; set; }
+
+        /// <summary>
         /// Transcode audio and video files into the preferred format. Also renames .jpeg to .jpg
         /// </summary>
         public bool Transcode { get; set; }
@@ -488,6 +493,11 @@ namespace FMPhotoFinish
                         {
                             OnProgressReport("   No date determined - cannot autosort.");
                         }
+                    }
+
+                    if (UpdateFileSystemDate && mdf.UpdateFileSystemDate())
+                    {
+                        OnProgressReport("   Updated file system Date Created.");
                     }
                 }
             }

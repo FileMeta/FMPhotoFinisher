@@ -19,14 +19,13 @@ using System.Text;
  *  -saveOriginalFn
  *  -sort
  *  -sDCIM
+ *  -updateFsDate
  * Next:
- * --- Ready to begin using
- *  -updateFileDate (dateCreated is not preserved when copying across volumes, but dateModified should reflect most recent change to metadata)
  *  -st
+ * --- Ready to begin using
  *  -shiftDate
  *  Test with no options - should just list values (potential conflict with design principles - figure this out)
  *  Tabular output format option (for later analytics)
- *  Add UUID Field (look for existing options)
  * 
  * Design Principles:
  *  * No command-line option required to preserve, transfer, or add information. For example,
@@ -137,6 +136,9 @@ Operations:
 
   -changeTimezone <tz>  Changes the timezone to the specified value keeping
                    the UTC time the same. (See details on timezone below.)
+
+  -updateFsDate    Update the file system dateCreated to match the metadata.
+                   Note that the file system dateModified value
 
 Other Options:
 
@@ -413,6 +415,10 @@ Timezones:
                                 }
                                 photoFinisher.ChangeTimezoneTo = tzi;
                             }
+                            break;
+
+                        case "-updatefsdate":
+                            photoFinisher.UpdateFileSystemDate = true;
                             break;
 
                         case "-log":

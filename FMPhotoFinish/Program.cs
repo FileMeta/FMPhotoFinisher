@@ -17,9 +17,9 @@ using System.Text;
  *  -setDate
  *  -setUUID
  *  -saveOriginalFn
- * Next:
  *  -sort
- *  -sDCF
+ *  -sDCIM
+ * Next:
  * --- Ready to begin using
  *  -updateFileDate (dateCreated is not preserved when copying across volumes, but dateModified should reflect most recent change to metadata)
  *  -st
@@ -87,10 +87,11 @@ Source:
                    similar to -s except that all files in subdirectories of
                    the specified path are also included.
 
-  -sDCF            Select files from all removable DCF (Design rule for
-                   Camera File system) devices. This is the best option for
-                   retrieving from digital cameras or memory cards from
-                   cameras.
+  -sDCIM           Select files from all removable DCF (Design rule for
+                   Camera File system) devices. These are removable drives
+                   with a DCIM folder in the root - typically used by digital
+                   cameras. This is the best option for retrieving from
+                   digital cameras or memory cards from cameras.
 
 Destination:
   If no destination is specified, then the updates are made in-place.
@@ -303,6 +304,21 @@ Timezones:
                             }
                             break;
 
+                        case "-copydcim":
+                            {
+                                Console.WriteLine("Copying test files.");
+                                int n = photoFinisher.CopyDcimTestFiles();
+                                Console.WriteLine($"Copied {n} files from DCIM_Test to DCIM.");
+                            }
+                            break;
+
+                        case "-sdcim":
+                            {
+                                int n = photoFinisher.SelectDcimFiles();
+                                Console.WriteLine($"Selected {n} from removable camera devices.");
+                            }
+                            break;
+
                         case "-d":
                             ++i;
                             {
@@ -414,6 +430,13 @@ Timezones:
                             s_commandLineError = true;
                             break;
                     }
+                }
+
+                if (photoFinisher.AutoSort && string.IsNullOrEmpty(photoFinisher.DestinationDirectory))
+                {
+                    Console.WriteLine("Command-line error: '-sort' option requires '-d' destination option.");
+                    Console.WriteLine("Use '-h' for syntax help");
+                    s_commandLineError = true;
                 }
             }
             catch (Exception err)

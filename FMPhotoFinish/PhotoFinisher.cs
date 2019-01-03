@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -8,10 +9,17 @@ namespace FMPhotoFinish
 {
     class PhotoFinisher
     {
+        const string c_dcimDirectory = "DCIM";
+        const string c_dcimTestDirectory = "DCIM_Test";
+
         // Selected Files
         List<ProcessFileInfo> m_selectedFiles = new List<ProcessFileInfo>();
         HashSet<string> m_selectedFilesHash = new HashSet<string>();
         long m_selectedFilesSize;
+
+        // DCF Directories from which files were selected
+        // This supports later cleanup of empty directories when move is used.
+        List<string> m_dcfDirectories = new List<string>();
 
         // Progress Reporting
 
@@ -107,6 +115,16 @@ namespace FMPhotoFinish
         /// </summary>
         public string DestinationDirectory { get; set; }
 
+        /// <summary>
+        /// Select files for processing using directory path with wildcards.
+        /// </summary>
+        /// <param name="path">The path (including possible wildcards) of files to sleect.</param>
+        /// <param name="recursive">If true, traverse subdirectories for matching files as well.</param>
+        /// <returns>The number of files selected.</returns>
+        /// <remarks>
+        /// <para>Wildcards may only appear in the filename, not in the earlier parts of the path.
+        /// </para>
+        /// </remarks>
         public int SelectFiles(string path, bool recursive)
         {
             int count = 0;
@@ -173,6 +191,128 @@ namespace FMPhotoFinish
             return count;
         }
 
+        /// <summary>
+        /// For testing purposes. Copies files from a DCIM_Test directory into the DCIM
+        /// directory.
+        /// </summary>
+        /// <returns>The number of files copied.</returns>
+        /// <remarks>
+        /// <para>This facilitates testing the <see cref="Move"/> feature by copying a set
+        /// of test files into the DCIM directory before they are moved out.
+        /// </para>
+        /// <para>For this method to do anything, a removable drive (e.g. USB or SD) must
+        /// be present with both DCIM and DCIM_Test directories on it. To be an effective
+        /// test - CopyDcimTestFiles must be invoked before SelectDcfFiles.
+        /// </para>
+        /// </remarks>
+        public int CopyDcimTestFiles()
+        {
+            int count = 0;
+
+            // Process each removable drive
+            foreach (DriveInfo drv in DriveInfo.GetDrives())
+            {
+                if (drv.IsReady && drv.DriveType == DriveType.Removable)
+                {
+                    // File system structure is according to JEITA "Design rule for Camera File System (DCF) which is JEITA specification CP-3461
+                    // See if the DCIM folder exists
+                    DirectoryInfo dcim = new DirectoryInfo(Path.Combine(drv.RootDirectory.FullName, c_dcimDirectory));
+                    DirectoryInfo dcimTest = new DirectoryInfo(Path.Combine(drv.RootDirectory.FullName, c_dcimTestDirectory));
+                    if (dcim.Exists && dcimTest.Exists)
+                    {
+                        count += CopyRecursive(dcimTest, dcim);
+                    }
+                }
+            }
+
+            return count;
+        }
+
+        private int CopyRecursive(DirectoryInfo src, DirectoryInfo dst)
+        {
+            if (!dst.Exists) dst.Create();
+
+            int count = 0;
+
+            foreach(var fi in src.GetFiles())
+            {
+                string dstName = Path.Combine(dst.FullName, fi.Name);
+                if (!File.Exists(dstName) && !Directory.Exists(dstName))
+                {
+                    fi.CopyTo(dstName);
+                    ++count;
+                }
+            }
+
+            foreach(var di in src.GetDirectories())
+            {
+                count += CopyRecursive(di, new DirectoryInfo(Path.Combine(dst.FullName, di.Name)));
+            }
+
+            return count;
+        }
+
+        /// <summary>
+        /// Selects all media files from attached DCF devices.
+        /// </summary>
+        /// <returns>The number of files selected.</returns>
+        /// <remarks>
+        /// <para>Finds each removable storage device (such as a flash drive or an attached camera).
+        /// For each device, looks for a "DCIM" folder according to the DCF (Design Rule for Camera
+        /// File System) specification. If found, traverses all subfolders and selects the associated
+        /// files.
+        /// </para>
+        /// </remarks>
+        public int SelectDcimFiles()
+        {
+            List<string> sourceFolders = new List<string>();
+
+            // Process each removable drive
+            foreach (DriveInfo drv in DriveInfo.GetDrives())
+            {
+                if (drv.IsReady && drv.DriveType == DriveType.Removable)
+                {
+                    try
+                    {
+                        // File system structure is according to JEITA "Design rule for Camera File System (DCF) which is JEITA specification CP-3461
+                        // See if the DCIM folder exists
+                        DirectoryInfo dcim = new DirectoryInfo(Path.Combine(drv.RootDirectory.FullName, c_dcimDirectory));
+                        if (dcim.Exists)
+                        {
+                            // Folders containing images must be named with three digits followed
+                            // by five alphanumeric characters. First digit cannot be zero.
+                            foreach (DirectoryInfo di in dcim.EnumerateDirectories())
+                            {
+                                if (di.Name.Length == 8)
+                                {
+                                    int dirnum;
+                                    if (int.TryParse(di.Name.Substring(0, 3), out dirnum) && dirnum >= 100 && dirnum <= 999)
+                                    {
+                                        sourceFolders.Add(di.FullName);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        // Suppress the error and move to the next drive.
+                    }
+                } // If drive is ready and removable
+            } // for each drive
+
+            int count = 0;
+            foreach (var path in sourceFolders)
+            {
+                int n = SelectFiles(path, false);
+                count += n;
+                if (n > 0) m_dcfDirectories.Add(path);
+            }
+
+            return count;
+        }
+
+
         public void PerformOperations()
         {
             m_selectedFilesHash = null; // No longer needed once selection is complete
@@ -180,7 +320,12 @@ namespace FMPhotoFinish
             // Move or copy the files if a destination directory is specified
             if (DestinationDirectory != null)
             {
-                CopyFiles();
+                CopyOrMoveFiles();
+
+                if (Move && m_dcfDirectories.Count > 0)
+                {
+                    CleanupDcfDirectories();
+                }
             }
 
             ProcessMediaFiles();
@@ -325,7 +470,7 @@ namespace FMPhotoFinish
                         OnProgressReport("   Metadata updated.");
                     }
 
-                    if (AutoSort)
+                    if (AutoSort && !string.IsNullOrEmpty(DestinationDirectory))
                     {
                         if (hasCreationDate)
                         {
@@ -352,7 +497,7 @@ namespace FMPhotoFinish
             }
         }
 
-        private void CopyFiles()
+        private void CopyOrMoveFiles()
         {
             string verb = Move ? "Moving" : "Copying";
             string dstDirectory = DestinationDirectory;
@@ -411,6 +556,50 @@ namespace FMPhotoFinish
 
             OnStatusReport(null);
             OnProgressReport($"{verb} complete. {m_selectedFiles.Count} files, {bytesCopied / (1024.0 * 1024.0): #,##0.0} MB, {elapsed.FmtCustom()} elapsed");
+        }
+
+        /// <summary>
+        /// Remove empty DCF directories from which files were moved.
+        /// </summary>
+        void CleanupDcfDirectories()
+        {
+            foreach (string directoryName in m_dcfDirectories)
+            {
+                // Clean up the folders
+                try
+                {
+                    DirectoryInfo di = new DirectoryInfo(directoryName);
+
+                    // Get rid of thumbnails unless a matching file still exists
+                    foreach (FileInfo fi in di.GetFiles("*.thm"))
+                    {
+                        bool hasMatch = false;
+                        foreach (FileInfo fi2 in di.GetFiles(Path.GetFileNameWithoutExtension(fi.Name) + ".*"))
+                        {
+                            if (!string.Equals(fi2.Extension, ".thm", StringComparison.OrdinalIgnoreCase))
+                            {
+                                hasMatch = true;
+                                break;
+                            }
+                        }
+                        if (!hasMatch) fi.Delete();
+                    }
+
+                    // Get rid of Windows thumbnails file (if it exists)
+                    {
+                        string thumbName = Path.Combine(di.FullName, "Thumbs.db");
+                        if (File.Exists(thumbName)) File.Delete(thumbName);
+                    }
+
+                    // If the folder is empty, delete it
+                    if (!di.EnumerateFileSystemInfos().Any()) di.Delete();
+                }
+                catch (Exception err)
+                {
+                    // Report errors during cleanup but proceed with other files.
+                    OnProgressReport($"Error cleaning up folders on removable drive '{Path.GetPathRoot(directoryName)}': {err.Message}");
+                }
+            }
         }
 
         private static char[] s_wildcards = new char[] { '*', '?' };

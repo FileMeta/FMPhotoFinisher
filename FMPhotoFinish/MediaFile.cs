@@ -496,6 +496,7 @@ namespace FMPhotoFinish
 
             // Move the file to the directory
             string dstPath = Path.Combine(dir, Path.GetFileName(m_filepath));
+            MakeFilepathUnique(ref dstPath);
             File.Move(m_filepath, dstPath);
             m_filepath = dstPath;
 

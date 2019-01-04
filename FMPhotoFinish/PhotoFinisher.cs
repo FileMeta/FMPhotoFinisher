@@ -133,66 +133,7 @@ namespace FMPhotoFinish
         public int SelectFiles(string path, bool recursive)
         {
             int count = 0;
-
-            try
-            {
-                string directory;
-                string pattern;
-
-                // If has wildcards, separate the parts
-                if (HasWildcard(path))
-                {
-                    directory = Path.GetDirectoryName(path);
-                    pattern = Path.GetFileName(path);
-                    if (HasWildcard(directory))
-                    {
-                        throw new ArgumentException($"Source '{path}' is invalid. Wildcards not allowed in directory name.");
-                    }
-                    if (string.IsNullOrEmpty(directory))
-                    {
-                        directory = Environment.CurrentDirectory;
-                    }
-                }
-
-                else if (Directory.Exists(path))
-                {
-                    directory = path;
-                    pattern = "*";
-                }
-
-                else
-                {
-                    directory = Path.GetDirectoryName(path);
-                    pattern = Path.GetFileName(path);
-                    if (string.IsNullOrEmpty(directory))
-                    {
-                        directory = Environment.CurrentDirectory;
-                    }
-                    if (!Directory.Exists(directory))
-                    {
-                        throw new ArgumentException($"Source '{path}' does not exist.");
-                    }
-                }
-
-                DirectoryInfo di = new DirectoryInfo(directory);
-                foreach (var fi in di.EnumerateFiles(pattern, recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly))
-                {
-                    if (MediaFile.IsSupportedMediaType(fi.Extension))
-                    {
-                        if (m_selectedFilesHash.Add(fi.FullName.ToLowerInvariant()))
-                        {
-                            m_selectedFiles.Add(new ProcessFileInfo(fi));
-                            m_selectedFilesSize += fi.Length;
-                            ++count;
-                        }
-                    }
-                }
-            }
-            catch (Exception err)
-            {
-                throw new ArgumentException($"Source '{path}' not found. ({err.Message})", err);
-            }
-
+            SelectFiles(path, recursive, ref count);
             return count;
         }
 
@@ -309,9 +250,10 @@ namespace FMPhotoFinish
             int count = 0;
             foreach (var path in sourceFolders)
             {
-                int n = SelectFiles(path, false);
-                count += n;
-                if (n > 0) m_dcfDirectories.Add(path);
+                int bookmark = count;
+                // Count is passed by reference so that the status report makes sense.
+                SelectFiles(path, false, ref count);
+                if (count > bookmark) m_dcfDirectories.Add(path);
             }
 
             return count;
@@ -507,6 +449,77 @@ namespace FMPhotoFinish
             }
         }
 
+        // <summary>
+        // Internal selectfiles - takes count by reference so that the progress report can
+        // use the total count.
+        // </summary>
+        private void SelectFiles(string path, bool recursive, ref int count)
+        {
+            try
+            {
+                string directory;
+                string pattern;
+
+                // If has wildcards, separate the parts
+                if (HasWildcard(path))
+                {
+                    directory = Path.GetDirectoryName(path);
+                    pattern = Path.GetFileName(path);
+                    if (HasWildcard(directory))
+                    {
+                        throw new ArgumentException($"Source '{path}' is invalid. Wildcards not allowed in directory name.");
+                    }
+                    if (string.IsNullOrEmpty(directory))
+                    {
+                        directory = Environment.CurrentDirectory;
+                    }
+                }
+
+                else if (Directory.Exists(path))
+                {
+                    directory = path;
+                    pattern = "*";
+                }
+
+                else
+                {
+                    directory = Path.GetDirectoryName(path);
+                    pattern = Path.GetFileName(path);
+                    if (string.IsNullOrEmpty(directory))
+                    {
+                        directory = Environment.CurrentDirectory;
+                    }
+                    if (!Directory.Exists(directory))
+                    {
+                        throw new ArgumentException($"Source '{path}' does not exist.");
+                    }
+                }
+
+                DirectoryInfo di = new DirectoryInfo(directory);
+                foreach (var fi in di.EnumerateFiles(pattern, recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly))
+                {
+                    if (MediaFile.IsSupportedMediaType(fi.Extension))
+                    {
+                        if (m_selectedFilesHash.Add(fi.FullName.ToLowerInvariant()))
+                        {
+                            m_selectedFiles.Add(new ProcessFileInfo(fi));
+                            m_selectedFilesSize += fi.Length;
+                            ++count;
+                            if ((count % 100) == 0)
+                            {
+                                OnStatusReport($"Selected: {count}");
+                                // For testing: System.Threading.Thread.Sleep(250);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception err)
+            {
+                throw new ArgumentException($"Source '{path}' not found. ({err.Message})", err);
+            }
+        }
+
         private void CopyOrMoveFiles()
         {
             string verb = Move ? "Moving" : "Copying";
@@ -571,7 +584,7 @@ namespace FMPhotoFinish
         /// <summary>
         /// Remove empty DCF directories from which files were moved.
         /// </summary>
-        void CleanupDcfDirectories()
+        private void CleanupDcfDirectories()
         {
             foreach (string directoryName in m_dcfDirectories)
             {

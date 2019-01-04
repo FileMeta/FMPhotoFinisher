@@ -217,7 +217,7 @@ namespace FMPhotoFinish
 
         public delegate void ProgressReporter(string progress);
 
-#endregion
+        #endregion
 
         string m_filepath;
         MediaType m_mediaType;

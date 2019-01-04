@@ -301,8 +301,18 @@ Timezones:
                         case "-s":
                             {
                                 ++i;
+                                Console.WriteLine($"Selecting from: {args[i]}");
                                 int n = photoFinisher.SelectFiles(args[i], false);
-                                Console.WriteLine($"Selected {n} from \"{args[i]}\"");
+                                Console.WriteLine($"   {n} media files selected.");
+                            }
+                            break;
+
+                        case "-st":
+                            {
+                                ++i;
+                                Console.WriteLine($"Selecting tree: \"{args[i]}\"");
+                                int n = photoFinisher.SelectFiles(args[i], true);
+                                Console.WriteLine($"   {n} media files selected.");
                             }
                             break;
 

@@ -66,9 +66,14 @@ namespace FMPhotoFinish
         public bool Move { get; set; }
 
         /// <summary>
-        /// Sets the Date to the specified value
+        /// Set the Date to the specified value
         /// </summary>
         public FileMeta.DateTag SetDateTo { get; set; }
+
+        /// <summary>
+        /// Shift the Date by the specified timespan.
+        /// </summary>
+        public TimeSpan? ShiftDateBy { get; set; }
 
         /// <summary>
         /// Sets the timezone to the specified value while keeping the local time the same.
@@ -366,6 +371,11 @@ namespace FMPhotoFinish
                         OnProgressReport($"   Date set to: {SetDateTo}");
                     }
 
+                    if (ShiftDateBy.HasValue && mdf.ShiftDate(ShiftDateBy.Value))
+                    {
+                        OnProgressReport($"   Date shifted to: {mdf.CreationDate}");
+                    }
+
                     if (SetTimezoneTo != null)
                     {
                         bool dstActive;
@@ -376,9 +386,9 @@ namespace FMPhotoFinish
                         else if (mdf.SetTimezone(SetTimezoneTo, out dstActive))
                         {
                             OnProgressReport($"   Timezone set to: {mdf.Timezone} {(dstActive ? "(DST)" : "(Standard)")}");
-                            // Change to unknown date to supporess timezone part when rendering
+                            // Change to forceLocal date to suppress timezone part when rendering
                             var localDate = mdf.CreationDate;
-                            localDate = new FileMeta.DateTag(localDate.Date, FileMeta.TimeZoneTag.Unknown, localDate.Precision);
+                            localDate = new FileMeta.DateTag(localDate.Date, FileMeta.TimeZoneTag.ForceLocal, localDate.Precision);
                             OnProgressReport($"   Date: {localDate} (Local)");
                         }
                         else
@@ -401,9 +411,9 @@ namespace FMPhotoFinish
                         else if (mdf.ChangeTimezone(ChangeTimezoneTo, out dstActive))
                         {
                             OnProgressReport($"   Timezone changed to: {mdf.Timezone} {(dstActive ? "(DST)" : "(Standard)")}");
-                            // Change to unknown date to supporess timezone part when rendering
+                            // Change to forceLocal date to supporess timezone part when rendering
                             var localDate = mdf.CreationDate;
-                            localDate = new FileMeta.DateTag(localDate.Date, FileMeta.TimeZoneTag.Unknown, localDate.Precision);
+                            localDate = new FileMeta.DateTag(localDate.Date, FileMeta.TimeZoneTag.ForceLocal, localDate.Precision);
                             OnProgressReport($"   Date: {localDate} (Local)");
                         }
                         else

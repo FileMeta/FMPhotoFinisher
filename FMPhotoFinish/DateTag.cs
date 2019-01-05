@@ -80,7 +80,7 @@ namespace FileMeta
         public static bool TryParse(string dateTag, out DateTag result)
         {
             // Init values for failure case
-            result = new DateTag(ZeroDate, TimeZoneTag.Unknown, 0);
+            result = new DateTag(ZeroDate, TimeZoneTag.Zero, 0);
 
             // Init parts
             int year = 0;
@@ -241,7 +241,7 @@ namespace FileMeta
         public DateTag(DateTime date, TimeZoneTag timeZone = null, int precision = 0)
         {
             // Default the timezone value if needed.
-            if (TimeZoneTag.IsNullOrUnknown(timeZone))
+            if (timeZone == null)
             {
                 switch (date.Kind)
                 {
@@ -254,7 +254,7 @@ namespace FileMeta
                         break;
 
                     default:
-                        timeZone = TimeZoneTag.Unknown;
+                        timeZone = TimeZoneTag.Zero;
                         break;
                 }
             }
@@ -272,21 +272,81 @@ namespace FileMeta
                     case TimeZoneKind.ForceUtc:
                         date = timeZone.ToUtc(date);
                         break;
-
-                    default:
-                        date = new DateTime(date.Ticks, DateTimeKind.Unspecified);
-                        break;
                 }
             }
 
             // Limit precision to compatible range
             if (precision > PrecisionMax) precision = PrecisionMax;
-            if (precision < PrecisionMin) precision = DetectPrecision(date);
-            
+            if (precision < PrecisionMin) precision = DetectPrecision(date);          
 
             Date = date;
             TimeZone = timeZone;
             Precision = precision;
+        }
+
+        /// <summary>
+        /// If TimeZone.Kind is <see cref="TimeZoneKind.ForceLocal"/> or <see cref="TimeZoneKind.ForceUtc"/>
+        /// resolves the timezone offset according to the default passed in. Else does nothing.
+        /// </summary>
+        /// <param name="defaultTimeZone">The default <see cref="TimeZoneInfo"/> with which to resolve
+        /// thei timezone. Use <see cref="TimeZoneInfo.Local"/> for the current system timezone.
+        /// </param>
+        /// <returns>A <see cref="TimeZoneTag"/> in which the TimeZone offset has been resolved.</returns>
+        /// <remarks>
+        /// <para>The time zone portion of a WTCDTF date-time string may be "Z" in which case
+        /// <see cref="TimeZoneTag.Kind"/> will be set to <see cref="TimeZoneTag.ForceUtc"/>. The time zone
+        /// portion may be blank in which case <see cref="TimeZoneTag.Kind"/> will be set to
+        /// <see cref="TimeZoneTag.ForceLocal"/>. Under either of these conditions it may be important
+        /// to resolve the timezone before performing date/time operations.
+        /// </para>
+        /// <para>This method updates the timezone to the default ONLY if the existing value
+        /// is either <see cref="TimeZoneKind.ForceLocal"/> or <see cref="TimeZoneKind.ForceUtc"/>.
+        /// </para>
+        /// </remarks>
+        public DateTag ResolveTimeZone(TimeZoneInfo defaultTimeZone)
+        {
+            if (TimeZone.Kind == TimeZoneKind.Normal) return this;
+
+            var tz = new TimeZoneTag(defaultTimeZone.GetUtcOffset(Date), TimeZoneKind.Normal);
+            return new DateTag(Date, tz, Precision);
+        }
+
+        /// <summary>
+        /// Convert the <see cref="Date"/> value to UTC (if it is not already).
+        /// </summary>
+        /// <returns>A <see cref="DateTime"/> with a <see cref="DateTimeKind"/> of <see cref="DateTimeKind.Utc"/>.</returns>
+        /// <remarks>
+        /// <para>If the <see cref="Date"/> is <see cref="DateTimeKind.Local"/> then the value is converted to
+        /// UTC using the offset in <see cref="TimeZone"/>.
+        /// </para>
+        /// <para>If <see cref="TimeZone.Kind"/> is <see cref="TimeZoneKind.ForceLocal"/> then the returned value
+        /// will have unchanged time but with <see cref="DateTime.Kind"/> changed to <see cref="DateTimeKind.Utc"/>.
+        /// This may or may not be the needed behavior. A prior call to <see cref="ResolveTimeZone"/> may be necessary
+        /// to achieve the desired results.
+        /// </para>
+        /// </remarks>
+        public DateTime ToUtc()
+        {
+            return TimeZone.ToUtc(Date);
+        }
+
+        /// <summary>
+        /// Convert the <see cref="Date"/> value to Local (if it is not already).
+        /// </summary>
+        /// <returns>A <see cref="DateTime"/> with a <see cref="DateTimeKind"/> of <see cref="DateTimeKind.Local"/>.</returns>
+        /// <remarks>
+        /// <para>If the <see cref="Date"/> is <see cref="DateTimeKind.Utc"/> then the value is converted to
+        /// Local using the offset in <see cref="TimeZone"/>. If the Date is already local then the result is unchanged.
+        /// </para>
+        /// <para>If <see cref="TimeZone.Kind"/> is <see cref="TimeZoneKind.ForceUtc"/> then the returned value
+        /// will have unchanged time but with <see cref="DateTime.Kind"/> changed to <see cref="DateTimeKind.Utc"/>.
+        /// This may or may not be the needed behavior. A prior call to <see cref="ResolveTimeZone"/> may be necessary
+        /// to achieve the desired results.
+        /// </para>
+        /// </remarks>
+        public DateTime ToLocal()
+        {
+            return TimeZone.ToLocal(Date);
         }
 
         #endregion Constructor and Methods

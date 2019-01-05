@@ -10,26 +10,21 @@ namespace FileMeta
     enum TimeZoneKind : int
     {
         /// <summary>
-        /// No timezone information available (field is blank or not present).
-        /// </summary>
-        Unknown = 0,
-
-        /// <summary>
         /// Normal timezone - specifies offset from UTC.
         /// </summary>
-        Normal = 1,
+        Normal = 0,
 
         /// <summary>
         /// Date-Time field should be treated as local time regardless of whether its
         /// definition indicates UTC or local.
         /// </summary>
-        ForceLocal = 2,
+        ForceLocal = 1,
 
         /// <summary>
         /// Date-Tiem field should be treated as UTC time regardless of whether its
         /// definition indicates UTC or local.
         /// </summary>
-        ForceUtc = 3
+        ForceUtc = 2
     }
 
     /// <summary>
@@ -93,7 +88,7 @@ namespace FileMeta
 
         #endregion Constants
 
-        #region Static Methods
+        #region Static Methods and Properties
 
         /// <summary>
         /// Parses a timezone string into a TimeZoneTag instance.
@@ -118,8 +113,8 @@ namespace FileMeta
         {
             if (string.IsNullOrEmpty(timezoneTag))
             {
-                result = Unknown;
-                return true;
+                result = Zero;
+                return false;
             }
             if (timezoneTag.Equals(c_local, StringComparison.Ordinal))
             {
@@ -132,7 +127,7 @@ namespace FileMeta
                 return true;
             }
 
-            result = Unknown;
+            result = Zero;
             if (timezoneTag.Length < 2) return false;
 
             bool negative;
@@ -168,19 +163,9 @@ namespace FileMeta
             return true;
         }
 
-        /// <summary>
-        /// Indicate whether a timezone value is not specified (either null or unknown)
-        /// </summary>
-        /// <param name="timezone">The timezone value to test.</param>
-        /// <returns>True if the value is null or if <see cref="Kind"/> is <see cref="TimeZoneKind.Unknown"/>. Else, false.</returns>
-        public static bool IsNullOrUnknown(TimeZoneTag timezone)
-        {
-            return timezone == null || timezone.Kind == TimeZoneKind.Unknown;
-        }
-
         #endregion Static Methods
 
-        public static readonly TimeZoneTag Unknown = new TimeZoneTag(0, TimeZoneKind.Unknown);
+        public static readonly TimeZoneTag Zero = new TimeZoneTag(0, TimeZoneKind.Normal);
         public static readonly TimeZoneTag ForceLocal = new TimeZoneTag(0, TimeZoneKind.ForceLocal);
         public static readonly TimeZoneTag ForceUtc = new TimeZoneTag(0, TimeZoneKind.ForceUtc);
 
@@ -318,66 +303,12 @@ namespace FileMeta
             return new DateTime(date.Ticks - (m_offset * c_ticksPerMinute), DateTimeKind.Utc);
         }
 
-        /// <summary>
-        /// Detaches a <see cref="DateTime"/> that was associated with this TimeZoneTag to be used
-        /// with the system's currently-set timezone. (See remarks.)
-        /// </summary>
-        /// <param name="date">The <see cref="DateTime"/> to detach.</param>
-        /// <returns>The detached DateTime.</returns>
-        /// <remarks>
-        /// <para>The operation of this method depends on <see cref="Kind"/>:
-        /// </para>
-        /// <para><see cref="TimeZoneKind.Normal"/>: If the inbound DateTime is <see cref="DateTimeKind.Utc"/>,
-        /// it is converted to the local timezone using <see cref="UtcOffset"/>. If
-        /// <see cref="DateTimeKind.Local"/> it is returned unchanged.
-        /// </para>
-        /// <para><see cref="TimeZoneKind.ForceLocal"/>: The value is returned with the the time
-        /// unchanged and <see cref="DateTime.Kind"/> set to <see cref="DateTimeKind.Local"/>.
-        /// </para>
-        /// <para><see cref="TimeZoneKind.ForceUtc"/>: The value is returned with the time unchanged
-        /// and <see cref="DateTimeKind"/> set to <see cref="DateTimeKind.Utc"/>.
-        /// </para>
-        /// <para><see cref="TimeZoneKind.Unknown"/>: The value is returned unchanged in any way.
-        /// </para>
-        /// <para>Inblund values with <see cref="DateTimeKind.Unspecified"/> are treated like local time.
-        /// Depending on the circumstances, this may lead to unexpected (though deterministic) results
-        /// so it is not recommended to use DateTime values with unspecified kind.
-        /// </para>
-        /// <para>Since the returned value may be <see cref="DateTimeKind.Utc"/> or <see cref="DateTimeKind.Local"/>
-        /// this is usually combined with <see cref="DateTime.ToLocalTime"/> or <see cref="DateTime.ToUniversalTime"/>
-        /// either of which uses the system's current timezone to convert when necessary. For example:
-        /// </para>
-        /// <code>var detachedTime = timeZoneTag.Detach(attachedTime).ToLocalTime();
-        /// </code>
-        /// </remarks>
-        public DateTime Detach(DateTime date)
-        {
-            if (date.Kind == DateTimeKind.Unspecified)
-                date = DateTime.SpecifyKind(date, DateTimeKind.Local);
-
-            switch (Kind)
-            {
-                case TimeZoneKind.Normal:
-                    return ToLocal(date);
-
-                case TimeZoneKind.ForceLocal:
-                    return DateTime.SpecifyKind(date, DateTimeKind.Local);
-
-                case TimeZoneKind.ForceUtc:
-                    return DateTime.SpecifyKind(date, DateTimeKind.Utc);
-
-                default: // TimeZoneKind.Unknown
-                    return date;
-            }
-        }
-
         #endregion
 
         #region Standard Methods
 
         public override string ToString()
         {
-            if (Kind == TimeZoneKind.Unknown) return string.Empty;
             if (Kind == TimeZoneKind.ForceLocal) return c_local;
             if (Kind == TimeZoneKind.ForceUtc) return c_utc;
 

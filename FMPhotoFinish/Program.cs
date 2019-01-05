@@ -20,10 +20,10 @@ using System.Text;
  *  -sort
  *  -sDCIM
  *  -updateFsDate
- * Next:
  *  -st
- * --- Ready to begin using
  *  -shiftDate
+ * Next:
+ * --- Ready to begin using
  *  Test with no options - should just list values (potential conflict with design principles - figure this out)
  *  Tabular output format option (for later analytics)
  * 
@@ -131,10 +131,20 @@ Operations:
                    to the specified date and time. (See details on format
                    of the date below.)
 
-  -setTimezone <tz>  Sets the timezone to the specified value keeping the
+  -shiftDate <+|-><[dd:]hh:mm:ss>
+  -shiftDate <target dateTime> <original dateTime> 
+                   Shifts the date/time of files by the specified amount. The
+                   amount to shift can be specified in either of two ways.
+                   In the first case, the offset is given by a number of
+                   days, hours, minutes and seconds. In the second case, the
+                   amount is specified by taking the difference between two
+                   dateTimes. (See details on both forms below.)
+
+  -setTimezone <tz> 
+                   Set the timezone to the specified value keeping the
                    local time the same. (See details on timezone below.)
 
-  -changeTimezone <tz>  Changes the timezone to the specified value keeping
+  -changeTimezone <tz>  Change the timezone to the specified value keeping
                    the UTC time the same. (See details on timezone below.)
 
   -updateFsDate    Update the file system dateCreated to match the metadata.
@@ -190,6 +200,53 @@ SetDate:
 
   Regardless of their order on the command-line, arguments are processed in
   this order: -setDate -setTimezone -changeTimezone.
+
+ShiftDate:
+  The amount to shift can be specified in either of two ways; In the first
+  case, the offset is given by a number of days, hours, minutes and seconds.
+  In the second case, the amount is specified by taking the difference
+  between two dateTimes.
+
+  An offset MUST be preceded by a sign (plus or minus) and follows this
+  format:
+
+  {+|-}{ d | d.hh:mm[:ss[.ff]] | hh:mm[:ss[.ff]] }
+
+  Elements in square brackets ([ and ]) are optional. One selection from the
+  list of alternatives enclosed in braces ({ and }) and separated by vertical
+  bars (|) is required. d=days, hh=hours, mm=minutes, ss=seconds, ff=fractions
+  of a second. Here are examples:
+
+    -shiftDate +3:00:00
+       Move forward 3 hours. For example, 3:25 becomes 3:25.
+
+    -shiftDate -2:15:00
+       Move backward 2 hours and 15 minutes. For example, 3:25 becomes 1:10.
+
+    -shiftDate +2.01:00:00
+       Move forward two days and one hour.
+
+    -shiftDate -1
+       Move backward one day.
+
+  The second way to specify the offset is to give two dateTimes, a target and
+  an original. Typically this is used when the time was set incorrectly on
+  a camera. You pick the time that's recorded on one of the photos (the
+  original) and then specify what that time should be (the target).
+  FMPhotoFinish takes the difference between the two times and shifts all
+  times in the set by that same amount.
+
+  Dates should be specified in W3CDTF format. See the SetDate information
+  above for details. Here are examples.
+
+    -shiftDate 2016-07-15 2015-07-10
+       Move forward one year and five days. A photo with the date of
+       July 10, 2015 would be changed to July 15, 2016 (while keeping the
+       time of day the same).
+
+    -shiftDate 2016-07-15T10:00 2017-07-15T11:00
+       Move backward one year and one day. A photo with the date of
+       July 10, 2017 at 8:00 would be changed to July 10, 2016 at 7:00.
 
 Timezones:
   The -setTimezone and -changeTimezone options are similar with an important
@@ -301,6 +358,13 @@ Timezones:
                         case "-s":
                             {
                                 ++i;
+                                if (i >= args.Length)
+                                {
+                                    Console.WriteLine($"Expected value for -s command-line argument.");
+                                    s_commandLineError = true;
+                                    break;
+                                }
+
                                 Console.WriteLine($"Selecting from: {args[i]}");
                                 int n = photoFinisher.SelectFiles(args[i], false);
                                 Console.WriteLine($"   {n} media files selected.");
@@ -310,6 +374,13 @@ Timezones:
                         case "-st":
                             {
                                 ++i;
+                                if (i >= args.Length)
+                                {
+                                    Console.WriteLine($"Expected value for -st command-line argument.");
+                                    s_commandLineError = true;
+                                    break;
+                                }
+
                                 Console.WriteLine($"Selecting tree: \"{args[i]}\"");
                                 int n = photoFinisher.SelectFiles(args[i], true);
                                 Console.WriteLine($"   {n} media files selected.");
@@ -332,8 +403,15 @@ Timezones:
                             break;
 
                         case "-d":
-                            ++i;
                             {
+                                ++i;
+                                if (i >= args.Length)
+                                {
+                                    Console.WriteLine($"Expected value for -d command-line argument.");
+                                    s_commandLineError = true;
+                                    break;
+                                }
+
                                 string dst = args[i];
                                 if (!Directory.Exists(dst))
                                 {
@@ -379,8 +457,15 @@ Timezones:
                             break;
 
                         case "-setdate":
-                            ++i;
                             {
+                                ++i;
+                                if (i >= args.Length)
+                                {
+                                    Console.WriteLine($"Expected value for -setDate command-line argument.");
+                                    s_commandLineError = true;
+                                    break;
+                                }
+
                                 FileMeta.DateTag dt;
                                 if (!FileMeta.DateTag.TryParse(args[i], out dt))
                                 {
@@ -389,19 +474,85 @@ Timezones:
                                     break;
                                 }
 
-                                // If timezone isn't specified, use the local timezone.
-                                if (dt.TimeZone.Kind == FileMeta.TimeZoneKind.ForceLocal || dt.TimeZone.Kind == FileMeta.TimeZoneKind.Unknown)
-                                {
-                                    var tzt = new FileMeta.TimeZoneTag(TimeZoneInfo.Local.GetUtcOffset(dt.Date), FileMeta.TimeZoneKind.Normal);
-                                    dt = new FileMeta.DateTag(dt.Date, tzt, dt.Precision);
-                                }
+                                // Default to the local timezone if needed
+                                dt = dt.ResolveTimeZone(TimeZoneInfo.Local);
+
                                 photoFinisher.SetDateTo = dt;
                             }
                             break;
 
-                        case "-settimezone":
-                            ++i;
+                        case "-shiftdate":
                             {
+                                ++i;
+                                if (i >= args.Length)
+                                {
+                                    Console.WriteLine($"Expected value for -shiftDate command-line argument.");
+                                    s_commandLineError = true;
+                                    break;
+                                }
+
+                                // If the next argument starts with a sign, then the shift amount is a simple timespan.
+                                if (args[i][0] == '+' || args[i][0] == '-')
+                                {
+                                    string s = (args[i][0] == '+') ? args[i].Substring(1) : args[i];
+                                    TimeSpan ts;
+                                    if (!TimeSpan.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, out ts))
+                                    {
+                                        Console.WriteLine($"Invalid value for -shiftDate '{args[i]}'.");
+                                        s_commandLineError = true;
+                                        break;
+                                    }
+
+                                    photoFinisher.ShiftDateBy = ts;
+                                }
+
+                                // Else, shift amount is the difference of two times
+                                else
+                                {
+                                    if (i+1 >= args.Length)
+                                    {
+                                        Console.WriteLine($"Expected two values for -shiftDate command-line argument.");
+                                        s_commandLineError = true;
+                                        break;
+                                    }
+
+                                    FileMeta.DateTag dtTarget;
+                                    if (!FileMeta.DateTag.TryParse(args[i], out dtTarget))
+                                    {
+                                        Console.WriteLine($"Invalid value for -shiftDate '{args[i]}'.");
+                                        s_commandLineError = true;
+                                        break;
+                                    }
+
+                                    ++i;
+                                    FileMeta.DateTag dtSource;
+                                    if (!FileMeta.DateTag.TryParse(args[i], out dtSource))
+                                    {
+                                        Console.WriteLine($"Invalid value for -shiftDate '{args[i]}'.");
+                                        s_commandLineError = true;
+                                        break;
+                                    }
+
+                                    // Resolve timezone if it was ambiguous.
+                                    dtTarget.ResolveTimeZone(TimeZoneInfo.Local);
+                                    dtSource.ResolveTimeZone(TimeZoneInfo.Local);
+
+                                    // For whatever reason, they might have used different timezones. Shift both to Utc before taking difference.
+                                    photoFinisher.ShiftDateBy = dtTarget.ToUtc().Subtract(dtSource.ToUtc());
+                                }
+                            }
+                            break;
+
+                        case "-settimezone":
+                            {
+                                ++i;
+                                if (i >= args.Length)
+                                {
+                                    Console.WriteLine($"Expected value for -setTimezone command-line argument.");
+                                    s_commandLineError = true;
+                                    break;
+                                }
+
                                 var tzi = TimeZoneParser.ParseTimeZoneId(args[i]);
                                 if (tzi == null)
                                 {
@@ -414,8 +565,15 @@ Timezones:
                             break;
 
                         case "-changetimezone":
-                            ++i;
                             {
+                                ++i;
+                                if (i >= args.Length)
+                                {
+                                    Console.WriteLine($"Expected value for -changeTimezone command-line argument.");
+                                    s_commandLineError = true;
+                                    break;
+                                }
+
                                 var tzi = TimeZoneParser.ParseTimeZoneId(args[i]);
                                 if (tzi == null)
                                 {

@@ -430,7 +430,7 @@ namespace FMPhotoFinish
 
         public TimeZoneTag Timezone
         {
-            get { return m_timezone ?? m_mtTimezone ?? m_etTimezone ?? TimeZoneTag.Unknown; }
+            get { return m_timezone ?? m_mtTimezone ?? m_etTimezone ?? null; }
         }
 
         public string TimezoneSource { get; private set; }
@@ -474,7 +474,7 @@ namespace FMPhotoFinish
             if (!m_creationDate.HasValue) throw new ApplicationException("MoveFileToDatePath: CreationDate has not yet been determined.");
 
             // Get a local dateTime for the file
-            var dt = (m_timezone != null) ? m_timezone.ToLocal(m_creationDate.Value) : m_creationDate.Value.ToLocalTime();
+            var dt = CreationDate.ResolveTimeZone(TimeZoneInfo.Local).ToLocal();
 
             // Create the directory string year\month\day
             // This part deliberately uses cultural-sensitive encoding so a system configured for French will use French month and day names.
@@ -592,7 +592,7 @@ namespace FMPhotoFinish
             // Value has already been determined
             if (m_timezone != null) return true;
 
-            if (!TimeZoneTag.IsNullOrUnknown(m_mtTimezone))
+            if (m_mtTimezone != null)
             {
                 m_timezone = m_mtTimezone;
                 TimezoneSource = "MetaTag";
@@ -600,7 +600,7 @@ namespace FMPhotoFinish
                 return true;
             }
 
-            if (!TimeZoneTag.IsNullOrUnknown(m_etTimezone))
+            if (m_etTimezone != null)
             {
                 m_timezone = m_etTimezone;
                 TimezoneSource = "MakerNote";
@@ -718,6 +718,16 @@ namespace FMPhotoFinish
             TimezoneSource = "Set";
         }
 
+        public bool ShiftDate(TimeSpan timespan)
+        {
+            if (!m_creationDate.HasValue) return false;
+
+            m_creationDate += timespan;
+            m_updateMetadata = true;
+            CreationDateSource = "Shifted";
+            return true;
+        }
+
         public bool SetTimezone(TimeZoneInfo tzi, out bool dstActive)
         {
             // If no creationDate, do nothing.
@@ -780,15 +790,8 @@ namespace FMPhotoFinish
             // If no creationDate, do nothing.
             if (!m_creationDate.HasValue) return false;
 
-            DateTime dateUtc;
-            if (m_timezone == null)
-            {
-                dateUtc = m_creationDate.Value.ToUniversalTime();
-            }
-            else
-            {
-                dateUtc = m_timezone.Detach(m_creationDate.Value).ToUniversalTime();
-            }
+            // Convert to UTC
+            DateTime dateUtc = CreationDate.ResolveTimeZone(TimeZoneInfo.Local).ToUtc();
 
             File.SetCreationTimeUtc(m_filepath, dateUtc);
             return true;
@@ -797,7 +800,7 @@ namespace FMPhotoFinish
         /// <summary>
         /// Save the original filename in custom metadata field.
         /// </summary>
-        /// <returns>True if original filename safed. False if original filename
+        /// <returns>True if original filename saved. False if original filename
         /// is already stored.</returns>
         public bool SaveOriginalFilename()
         {
@@ -833,6 +836,9 @@ namespace FMPhotoFinish
             if (m_mediaType == MediaType.Unsupported)
                 throw new ApplicationException("Cannot update metadata on unsupported media type.");
 
+            // Timezone to use for conversions as values are saved.
+            var timezone = m_timezone ?? TimeZoneTag.Zero;
+
             // If audio or video, attempt to use Isom to update creationDate
             bool creationDateStoredByIsom = false;
             if (m_creationDate.HasValue && (m_mediaType == MediaType.Video || m_mediaType == MediaType.Audio))
@@ -843,7 +849,7 @@ namespace FMPhotoFinish
                     using (isom)
                     {
                         // Convert to UTC (this does nothing if it is already UTC.
-                        var dt = (m_timezone != null) ? m_timezone.ToUtc(m_creationDate.Value) : m_creationDate.Value.ToUniversalTime();
+                        var dt = timezone.ToUtc(m_creationDate.Value);
                         isom.CreationTime = dt;
                         isom.ModificationTime = dt;
                         isom.Commit();
@@ -866,7 +872,7 @@ namespace FMPhotoFinish
                         if (m_creationDate.HasValue && !creationDateStoredByIsom)
                         {
                             // Convert to local (this does nothing if it is already Local.
-                            var dt = (m_timezone != null) ? m_timezone.ToLocal(m_creationDate.Value) : m_creationDate.Value.ToLocalTime();
+                            var dt = timezone.ToLocal(m_creationDate.Value);
                             ps.SetValue(PropertyKeys.DateTaken, dt);
                         }
                     }
@@ -877,7 +883,7 @@ namespace FMPhotoFinish
                         if (m_creationDate.HasValue && !creationDateStoredByIsom)
                         {
                             // Convert to UTC (this does nothing if it is already UTC.
-                            var dt = (m_timezone != null) ? m_timezone.ToUtc(m_creationDate.Value) : m_creationDate.Value.ToUniversalTime();
+                            var dt = m_timezone.ToUtc(m_creationDate.Value);
                             ps.SetValue(PropertyKeys.DateEncoded, dt);
                         }
                     }

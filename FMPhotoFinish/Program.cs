@@ -22,6 +22,7 @@ using System.Text;
  *  -updateFsDate
  *  -st
  *  -shiftDate
+ *  -allTheWay
  * Next:
  * --- Ready to begin using
  *  Test with no options - should just list values (potential conflict with design principles - figure this out)
@@ -107,17 +108,13 @@ Destination:
                    files are left at the source.
 
 Operations:
+  -autorot         Using the 'orientation' metadata flag, auto rotate images
+                   to their vertical position and clear the orientation flag.
+
   -orderednames    Canon cameras prefix photos with ""IMG_"" and videos with
                    ""MVI_"". This option renames videos to use the ""IMG_""
                    prefix thereby having them show in order with the
                    associated photos.
-
-  -autorot         Using the 'orientation' metadata flag, auto rotate images
-                   to their vertical position and clear the orientation flag.
-
-  -transcode       Transcode video and audio files to the preferred format
-                   which is .mp4 for video and .m4a for audio. Also renames
-                   .jpeg files to .jpg.
 
   -saveOriginalFn  Save the original filename in a custom metaTag stored
                    in the comments property. If the property already exists,
@@ -126,6 +123,13 @@ Operations:
   -setUUID         Set a unique UUID as a custom metaTag stored in the
                    comments property. If the property already exists, it is
                    preserved.
+
+  -transcode       Transcode video and audio files to the preferred format
+                   which is .mp4 for video and .m4a for audio. Also renames
+                   .jpeg files to .jpg.
+
+  -alTheWay        Performs all of the basic operations. Equivalent to:
+                   -orderednames -autorot -transcode -saveOriginalFn -setUUID
 
   -setDate <dateTime>  Set the dateCreated/dateTaken value in the metadata
                    to the specified date and time. (See details on format
@@ -435,8 +439,8 @@ Timezones:
                             photoFinisher.Move = true;
                             break;
 
-                        case "-transcode":
-                            photoFinisher.Transcode = true;
+                        case "-autorot":
+                            photoFinisher.AutoRotate = true;
                             break;
 
                         case "-orderednames":
@@ -452,8 +456,16 @@ Timezones:
                             photoFinisher.SetUuid = true;
                             break;
 
-                        case "-autorot":
+                        case "-transcode":
+                            photoFinisher.Transcode = true;
+                            break;
+
+                        case "-alltheway":
                             photoFinisher.AutoRotate = true;
+                            photoFinisher.SetOrderedNames = true;
+                            photoFinisher.SaveOriginalFilaname = true;
+                            photoFinisher.SetUuid = true;
+                            photoFinisher.Transcode = true;
                             break;
 
                         case "-setdate":

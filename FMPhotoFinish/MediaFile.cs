@@ -785,7 +785,7 @@ namespace FMPhotoFinish
         /// <remarks>
         /// <para></para>
         /// </remarks>
-        public bool UpdateFileSystemDate()
+        public bool UpdateFileSystemDateCreated()
         {
             // If no creationDate, do nothing.
             if (!m_creationDate.HasValue) return false;
@@ -794,6 +794,26 @@ namespace FMPhotoFinish
             DateTime dateUtc = CreationDate.ResolveTimeZone(TimeZoneInfo.Local).ToUtc();
 
             File.SetCreationTimeUtc(m_filepath, dateUtc);
+            return true;
+        }
+
+        /// <summary>
+        /// Update the FileSystem dateCreated value to match the metadata.
+        /// </summary>
+        /// <returns>True if the FileSystem dateModified was updated. False if the date created
+        /// has not been determined and so no update was accomplished.</returns>
+        /// <remarks>
+        /// <para></para>
+        /// </remarks>
+        public bool UpdateFileSystemDateModified()
+        {
+            // If no creationDate, do nothing.
+            if (!m_creationDate.HasValue) return false;
+
+            // Convert to UTC
+            DateTime dateUtc = CreationDate.ResolveTimeZone(TimeZoneInfo.Local).ToUtc();
+
+            File.SetLastWriteTimeUtc(m_filepath, dateUtc);
             return true;
         }
 

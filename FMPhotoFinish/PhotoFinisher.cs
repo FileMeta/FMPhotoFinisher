@@ -96,7 +96,12 @@ namespace FMPhotoFinish
         /// <summary>
         /// Updates the file system dateCreated value to match the metadata date created.
         /// </summary>
-        public bool UpdateFileSystemDate { get; set; }
+        public bool UpdateFileSystemDateCreated { get; set; }
+
+        /// <summary>
+        /// Updates the file system dateModified value to match the metadata date created.
+        /// </summary>
+        public bool UpdateFileSystemDateModified { get; set; }
 
         /// <summary>
         /// Transcode audio and video files into the preferred format. Also renames .jpeg to .jpg
@@ -447,10 +452,16 @@ namespace FMPhotoFinish
                         }
                     }
 
-                    if (UpdateFileSystemDate && mdf.UpdateFileSystemDate())
+                    if (UpdateFileSystemDateCreated && mdf.UpdateFileSystemDateCreated())
                     {
-                        OnProgressReport("   Updated file system Date Created.");
+                        OnProgressReport("   Updated FS Date Created.");
                     }
+
+                    if (UpdateFileSystemDateModified && mdf.UpdateFileSystemDateModified())
+                    {
+                        OnProgressReport("   Updated FS Date Modified.");
+                    }
+
                 }
             }
             catch (Exception err)

@@ -151,8 +151,13 @@ Operations:
   -changeTimezone <tz>  Change the timezone to the specified value keeping
                    the UTC time the same. (See details on timezone below.)
 
-  -updateFsDate    Update the file system dateCreated to match the metadata.
-                   Note that the file system dateModified value
+  -updateFsCreate  Update the file system dateCreated to match the metadata
+                   Date Created / Date Taken value.
+
+  -updateFsMod     Update the file system dateModified to match the metadata
+                   Date Created / Date Modified value. Note that some cloud
+                   sync systems key off the DateModified value and this may
+                   interfere with that operation.
 
 Other Options:
 
@@ -597,8 +602,12 @@ Timezones:
                             }
                             break;
 
-                        case "-updatefsdate":
-                            photoFinisher.UpdateFileSystemDate = true;
+                        case "-updatefscreate":
+                            photoFinisher.UpdateFileSystemDateCreated = true;
+                            break;
+
+                        case "-updatefsmod":
+                            photoFinisher.UpdateFileSystemDateModified = true;
                             break;
 
                         case "-log":

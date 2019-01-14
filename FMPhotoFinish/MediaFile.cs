@@ -36,6 +36,8 @@ namespace FMPhotoFinish
         //const string c_makeKey = "make";
         //const string c_modelKey = "model";
 
+        const string c_defaultTitle = "Pic";
+
         static readonly TimeSpan s_timespanZero = new TimeSpan(0);
 
         #region Static Members
@@ -231,6 +233,8 @@ namespace FMPhotoFinish
         DateTime? m_psDateTaken;
         DateTime? m_psDateEncoded;
         TimeSpan? m_psDuration;
+        string m_psSubject;
+        string m_psTitle;
 
         // Metatag values from Property System Keywords
         TimeZoneTag m_mtTimezone;
@@ -282,8 +286,20 @@ namespace FMPhotoFinish
                         m_psDuration = new TimeSpan((long)(ulong)duration);
                 }
                 Orientation = (int)(ushort)(propstore.GetValue(PropertyKeys.Orientation) ?? (ushort)1);
-                m_make = (string)propstore.GetValue(PropertyKeys.Make);
-                m_model = (string)propstore.GetValue(PropertyKeys.Model);
+                m_make = propstore.GetValue(PropertyKeys.Make) as string;
+                m_model = propstore.GetValue(PropertyKeys.Model) as string;
+                m_psSubject = propstore.GetValue(PropertyKeys.Subject) as string;
+                m_psTitle = propstore.GetValue(PropertyKeys.Title) as string;
+
+                if (m_psSubject != null)
+                    m_psSubject = m_psSubject.Trim();
+
+                if (m_psTitle != null)
+                    m_psTitle = m_psTitle.Trim();
+
+                // Windows property system will fill in the subject with the title if subject is not present. Compensate for that.
+                if (string.Equals(m_psSubject, m_psTitle, StringComparison.Ordinal))
+                    m_psSubject = null; 
 
                 // Keywords may be used to store custom metadata
                 var metaTagSet = new MetaTagSet();
@@ -466,12 +482,60 @@ namespace FMPhotoFinish
         }
 
         /// <summary>
+        /// Change the filename to be based on the date the photo was taken plus subject and title metadata
+        /// </summary>
+        /// <returns>True if the name was changed. False if the photo has no DateTaken metadata.</returns>
+        /// <remarks>
+        /// <para>The new filename pattern is: yyyy-mm-dd_hhmmss &lt;subject&gt; - &lt;title&gt;.jpg.
+        /// For example, "2019-01-15_142022 Mirror Lake - John Fishing.jpg".
+        /// </para>
+        /// <para>If the title is not present, no dash or title will appear. If the subject is not
+        /// present, a dash and the title will appear. If neither is present, the word, "Pic" will
+        /// substitute.
+        /// </para>
+        /// <para>If more than one photo was taken at the exact same second then the filename will have a
+        /// numeric extension like this: "2019-01-15_142022_Pic (01).jpg.
+        /// </para>
+        /// </remarks>
+        public bool SetMetadataName()
+        {
+            if (!m_creationDate.HasValue) return false;
+
+            // Get a local dateTime for the file
+            var dt = CreationDate.ResolveTimeZone(TimeZoneInfo.Local).ToLocal();
+
+            string newName = dt.ToString("yyyy-MM-dd_HHmmss",
+                System.Globalization.CultureInfo.InvariantCulture);
+
+            if (!string.IsNullOrEmpty(m_psSubject))
+                newName = string.Concat(newName, " ", m_psSubject);
+
+            if (!string.IsNullOrEmpty(m_psTitle))
+                newName = string.Concat(newName, " - ", m_psTitle);
+
+            if (string.IsNullOrEmpty(m_psTitle) && string.IsNullOrEmpty(m_psSubject))
+            {
+                newName = string.Concat(newName, " ", c_defaultTitle);
+            }
+
+            newName = string.Concat(newName, Path.GetExtension(m_filepath));
+
+            // Change the filename
+            string dstPath = Path.Combine(Path.GetDirectoryName(m_filepath), newName);
+            MakeFilepathUnique(ref dstPath);
+            File.Move(m_filepath, dstPath);
+            m_filepath = dstPath;
+
+            return true;
+        }
+
+        /// <summary>
         /// Moves the file to a path based on its creation date.
         /// </summary>
-        /// <returns>True if successful. False if there is a file by the name of one of the directories in the path.</returns>
+        /// <returns>True if successful. False if a date has not been set or if there is a file by the name of one of the directories in the path.</returns>
         public bool MoveFileToDatePath(string dstRoot)
         {
-            if (!m_creationDate.HasValue) throw new ApplicationException("MoveFileToDatePath: CreationDate has not yet been determined.");
+            if (!m_creationDate.HasValue) return false;
 
             // Get a local dateTime for the file
             var dt = CreationDate.ResolveTimeZone(TimeZoneInfo.Local).ToLocal();
@@ -1183,6 +1247,8 @@ namespace FMPhotoFinish
         public static PROPERTYKEY Model = new PROPERTYKEY("14b81da1-0135-4d31-96d9-6cbfc9671a99", 272); // System.Photo.CameraModel
         public static PROPERTYKEY ImageId = new PROPERTYKEY("10DABE05-32AA-4C29-BF1A-63E2D220587F", 100); // System.Image.ImageID
         public static PROPERTYKEY Comment = new PROPERTYKEY("F29F85E0-4FF9-1068-AB91-08002B27B3D9", 6); // 
+        public static PROPERTYKEY Subject = new PROPERTYKEY("F29F85E0-4FF9-1068-AB91-08002B27B3D9", 3); // System.Subject
+        public static PROPERTYKEY Title = new PROPERTYKEY("F29F85E0-4FF9-1068-AB91-08002B27B3D9", 2); // System.Title
     }
 
     /// <summary>

@@ -56,6 +56,11 @@ namespace FMPhotoFinish
         public bool SetOrderedNames { get; set; }
 
         /// <summary>
+        /// Change the filename to one based on the date the photo was taken plus subject and title metadata.
+        /// </summary>
+        public bool SetMetadataNames { get; set; }
+
+        /// <summary>
         /// Auto-rotate images to the vertical position.
         /// </summary>
         public bool AutoRotate { get; set; }
@@ -430,6 +435,12 @@ namespace FMPhotoFinish
                     if (mdf.CommitMetadata())
                     {
                         OnProgressReport("   Metadata updated.");
+                    }
+
+                    if (SetMetadataNames && mdf.SetMetadataName())
+                    {
+                        fi.Filepath = mdf.Filepath;
+                        OnProgressReport("   Rename to: " + Path.GetFileName(mdf.Filepath));
                     }
 
                     if (AutoSort && !string.IsNullOrEmpty(DestinationDirectory))

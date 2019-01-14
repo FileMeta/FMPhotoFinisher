@@ -111,10 +111,22 @@ Operations:
   -autorot         Using the 'orientation' metadata flag, auto rotate images
                    to their vertical position and clear the orientation flag.
 
-  -orderednames    Canon cameras prefix photos with ""IMG_"" and videos with
+  -orderedNames    Canon cameras prefix photos with ""IMG_"" and videos with
                    ""MVI_"". This option renames videos to use the ""IMG_""
                    prefix thereby having them show in order with the
                    associated photos.
+
+  -metaFileNames   Names the photos according to the date they were taken
+                   plus subject and title metadata. If the dateTaken metadata
+                   is not present, does nothing even if subject and title are
+                   present. The new filename pattern is:
+                       yyyy-mm-dd_hhmmss <subject> - <title>.jpg
+                   For example:
+                       2019-01-15_142022 Mirror Lake - John Fishing.jpg
+                   If the title is not present, no dash or title will appear.
+                   If the subject is not present, a dash and the title will
+                   appear. If neither is present, the word, ""Pic"", will
+                   substitute.
 
   -saveOriginalFn  Save the original filename in a custom metaTag stored
                    in the comments property. If the property already exists,
@@ -128,8 +140,8 @@ Operations:
                    which is .mp4 for video and .m4a for audio. Also renames
                    .jpeg files to .jpg.
 
-  -alTheWay        Performs all of the basic operations. Equivalent to:
-                   -orderednames -autorot -transcode -saveOriginalFn -setUUID
+  -allTheWay        Performs all of the basic operations. Equivalent to:
+                   -orderedNames -autorot -transcode -saveOriginalFn -setUUID
 
   -setDate <dateTime>  Set the dateCreated/dateTaken value in the metadata
                    to the specified date and time. (See details on format
@@ -450,6 +462,12 @@ Timezones:
 
                         case "-orderednames":
                             photoFinisher.SetOrderedNames = true;
+                            photoFinisher.SetMetadataNames = false;
+                            break;
+
+                        case "-metafilenames":
+                            photoFinisher.SetMetadataNames = true;
+                            photoFinisher.SetOrderedNames = false;
                             break;
 
                         case "-saveoriginalfn":
@@ -467,7 +485,8 @@ Timezones:
 
                         case "-alltheway":
                             photoFinisher.AutoRotate = true;
-                            photoFinisher.SetOrderedNames = true;
+                            if (!photoFinisher.SetMetadataNames)
+                                photoFinisher.SetOrderedNames = true;
                             photoFinisher.SaveOriginalFilaname = true;
                             photoFinisher.SetUuid = true;
                             photoFinisher.Transcode = true;

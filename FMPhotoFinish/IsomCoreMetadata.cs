@@ -2,8 +2,8 @@
 ---
 name: IsomCoreMetadata.cs
 description: Read and write basic metadata on ISO Base Media File Format including .MP4 .MOV and .M4A
-url: https://github.com/FileMeta/WinShellPropertyStore/raw/master/WinShellPropertyStore.cs
-version: 1.1
+url: https://raw.githubusercontent.com/FileMeta/IsomCoreMetadata/master/IsomCoreMetadata.cs
+version: 1.2
 keywords: CodeBit
 dateModified: 2018-05-02
 license: http://unlicense.org

@@ -303,13 +303,13 @@ namespace FMPhotoFinish
 
                 // Keywords may be used to store custom metadata
                 var metaTagSet = new MetaTagSet();
-                metaTagSet.LoadMetatags((string)propstore.GetValue(PropertyKeys.Comment));
+                metaTagSet.Load((string)propstore.GetValue(PropertyKeys.Comment));
                 {
                     string value;
 
                     // Timezone
                     TimeZoneTag tz;
-                    if (metaTagSet.MetaTags.TryGetValue(c_timezoneKey, out value)
+                    if (metaTagSet.TryGetValue(c_timezoneKey, out value)
                         && TimeZoneTag.TryParse(value, out tz))
                     {
                         m_mtTimezone = tz;
@@ -317,7 +317,7 @@ namespace FMPhotoFinish
 
                     // Date precision
                     int precision;
-                    if (metaTagSet.MetaTags.TryGetValue(c_datePrecisionKey, out value)
+                    if (metaTagSet.TryGetValue(c_datePrecisionKey, out value)
                         && int.TryParse(value, out precision)
                         && precision >= DateTag.PrecisionMin && precision <= DateTag.PrecisionMax)
                     {
@@ -325,7 +325,7 @@ namespace FMPhotoFinish
                     }
 
                     // Original Filename
-                    if (metaTagSet.MetaTags.TryGetValue(c_originalFilenameKey, out value)
+                    if (metaTagSet.TryGetValue(c_originalFilenameKey, out value)
                         && !string.IsNullOrEmpty(value))
                     {
                         m_originalFilename = value;
@@ -333,7 +333,7 @@ namespace FMPhotoFinish
 
                     // UUID
                     Guid uuid;
-                    if (metaTagSet.MetaTags.TryGetValue(c_uuidKey, out value)
+                    if (metaTagSet.TryGetValue(c_uuidKey, out value)
                         && Guid.TryParse(value, out uuid))
                     {
                         m_uuid = uuid;
@@ -973,23 +973,22 @@ namespace FMPhotoFinish
                     }
 
                     if (m_timezone != null)
-                        metaTagSet.MetaTags[c_timezoneKey] = m_timezone.ToString();
+                        metaTagSet[c_timezoneKey] = m_timezone.ToString();
                     if (m_datePrecision >= DateTag.PrecisionMin)
-                        metaTagSet.MetaTags[c_datePrecisionKey] = m_datePrecision.ToString();
+                        metaTagSet[c_datePrecisionKey] = m_datePrecision.ToString();
                     if (!string.IsNullOrEmpty(m_originalFilename))
-                        metaTagSet.MetaTags[c_originalFilenameKey] = m_originalFilename;
+                        metaTagSet[c_originalFilenameKey] = m_originalFilename;
                     if (!m_uuid.Equals(Guid.Empty))
-                        metaTagSet.MetaTags[c_uuidKey] = m_uuid.ToString("D");
+                        metaTagSet[c_uuidKey] = m_uuid.ToString("D");
                     if (!string.IsNullOrEmpty(m_make))
                         ps.SetValue(PropertyKeys.Make, m_make);
                     if (!string.IsNullOrEmpty(m_model))
                         ps.SetValue(PropertyKeys.Model, m_model);
 
-                    if (metaTagSet.MetaTags.Count > 0)
+                    if (metaTagSet.Count > 0)
                     {
                         ps.SetValue(PropertyKeys.Comment,
-                            metaTagSet.AddMetatagsToString(
-                                ps.GetValue(PropertyKeys.Comment) as string));
+                            metaTagSet.EmbedAndUpdate(ps.GetValue(PropertyKeys.Comment) as string));
                     }
 
                     ps.Commit();

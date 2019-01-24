@@ -1,6 +1,50 @@
 ﻿/*
-This will eventually be a CodeBit. The class manages Date metadata field values.
+---
+name: DateTag.cs
+description: CodeBit class that represents a Date metadata tag including DateTime, TimeZone, and Precision components. Includes parsing and formatting methods.
+url: https://raw.githubusercontent.com/FileMeta/DateTag/master/DateTag.cs
+version: 1.0
+keywords: CodeBit
+dateModified: 2019-01-23
+license: https://opensource.org/licenses/BSD-3-Clause
+dependsOn: https://raw.githubusercontent.com/FileMeta/TimeZoneTag/master/TimeZoneTag.cs
+# Metadata in MicroYaml format. See http://filemeta.org/CodeBit.html
+...
 */
+
+/*
+=== BSD 3 Clause License ===
+https://opensource.org/licenses/BSD-3-Clause
+
+Copyright 2019 Brandt Redd
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice,
+this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+this list of conditions and the following disclaimer in the documentation
+and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors
+may be used to endorse or promote products derived from this software without
+specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+*/
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -56,7 +100,7 @@ namespace FileMeta
         #region Static Methods
 
         /// <summary>
-        /// Parses a metadata date tag into <see cref="DateTime"/>, <see cref="TimeZoneTag"/>, and significant digits.
+        /// Parses a metadata date tag into a <see cref="DateTag"/> including <see cref="DateTime"/>, <see cref="TimeZoneTag"/>, and significant digits.
         /// </summary>
         /// <param name="dateTag">The value to be parsed in <see cref="https://www.w3.org/TR/NOTE-datetime">W3CDTF</see> format.</param>
         /// <param name="result">The result of the parsing.</param>
@@ -94,6 +138,8 @@ namespace FileMeta
             // Track position
             int pos = 0;
 
+            if (dateTag.Length < 4) return false;
+
             if (!int.TryParse(dateTag.Substring(0, 4), out year)
                 || year < 1 || year > 9999) return false;
             int precision = PrecisionYear;
@@ -107,7 +153,7 @@ namespace FileMeta
                 if (dateTag.Length > 8 && dateTag[7] == '-')
                 {
                     if (!int.TryParse(dateTag.Substring(8, 2), out day)
-                        || day < 1 || day > 31) return false;
+                        || day < 1 || day > DateTime.DaysInMonth(year, month)) return false;
                     precision = PrecisionDay;
                     pos = 10;
                     if (dateTag.Length > 11 && (dateTag[10] == 'T' || dateTag[10] == ' ')) // Even though W3CDTF and ISO 8601 specify 'T' separating date and time, tolerate a space as an alternative.
@@ -169,6 +215,23 @@ namespace FileMeta
         }
 
         /// <summary>
+        /// Parses a metadata date tag into <see cref="DateTime"/>, <see cref="TimeZoneTag"/>, and significant digits.
+        /// </summary>
+        /// <param name="dateTag">The value to be parsed in <see cref="https://www.w3.org/TR/NOTE-datetime">W3CDTF</see> format.</param>
+        /// <returns>The resulting <see cref="DateTag"/>.</returns>
+        /// <exception cref="ArgumentException">The dateTag was not in a supported format.</exception>
+        /// <seealso cref="TryParse(string, out DateTag)"/>
+        public static DateTag Parse(string dateTag)
+        {
+            DateTag value;
+            if (!TryParse(dateTag, out value))
+            {
+                throw new ArgumentException();
+            }
+            return value;
+        }
+
+        /// <summary>
         /// Detects sub-second precision from a <see cref="DateTime"/> value;
         /// </summary>
         /// <param name="dt">The value on which to detect precision.</param>
@@ -178,7 +241,6 @@ namespace FileMeta
         /// point. Value will be <see cref="PrecisionSecond"/> (14), <see cref="PrecisionMillisecond"/> (18),
         /// <see cref="PrecisionMicrosecond"/> (20), or <see cref="PrecisionTick"/> (21).
         /// </para>
-        /// <para>Essentially this simply suppresses trailing zeros after the decimal point.</para>
         /// </remarks>
         public static int DetectPrecision(DateTime dt)
         {
@@ -432,61 +494,5 @@ namespace FileMeta
         }
 
         #endregion
-
-        #region Test
-
-#if DEBUG
-
-        /* When this is converted into a CodeBit, the tests should be
-         * automated (verifying the result rather than visual verification)
-         * and included as the unit test for the dedicated project. */
-
-        public static void PerformTest()
-        {
-            TestTagParse("2018");
-            TestTagParse("2018-12");
-            TestTagParse("2018-12-28");
-            TestTagParse("2018-12-28T10");
-            TestTagParse("2018-12-28T10-05:00");
-            TestTagParse("2018-12-28T10+08:00");
-            TestTagParse("2018-12-28T10:59");
-            TestTagParse("2018-12-28T10:59-05");
-            TestTagParse("2018-12-28T10:59+08");
-            TestTagParse("2018-12-28T10:59:45");
-            TestTagParse("2018-12-28T10:59:45-5");
-            TestTagParse("2018-12-28T10:59:45+8");
-            TestTagParse("2018-12-28T10:59:45.123");
-            TestTagParse("2018-12-28T10:59:45.123-5");
-            TestTagParse("2018-12-28T10:59:45.123+8");
-            TestTagParse("2018-12-28T10:59:45.1");
-            TestTagParse("2018-12-28T10:59:45.12");
-            TestTagParse("2018-12-28T10:59:45.123");
-            TestTagParse("2018-12-28T10:59:45.1234");
-            TestTagParse("2018-12-28T10:59:45.12345");
-            TestTagParse("2018-12-28T10:59:45.123456");
-            TestTagParse("2018-12-28T10:59:45.1234567");
-            TestTagParse("2018-12-28T10:59:45.12345678");
-            TestTagParse("2018-12-28T10:59:45.12345678+08:23");
-        }
-
-        static void TestTagParse(string s)
-        {
-            Console.WriteLine(s);
-            DateTag date;
-            if (!TryParse(s, out date))
-            {
-                Console.WriteLine("Fail");
-                return;
-            }
-            Console.WriteLine($"   Date: {date.Date.ToString("o")}");
-            Console.WriteLine($"   Fmt:  {date}");
-            Console.WriteLine($"   TZ:   {date.TimeZone}");
-            Console.WriteLine($"   Pre:  {date.Precision}");
-        }
-
-#endif
-
-        #endregion Tests
-
     }
 }

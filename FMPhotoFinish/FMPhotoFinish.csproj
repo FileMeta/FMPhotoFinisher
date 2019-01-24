@@ -47,7 +47,7 @@
     <Compile Include="IsomCoreMetadata.cs" />
     <Compile Include="JpegRotator.cs" />
     <Compile Include="MediaFile.cs" />
-    <Compile Include="MetaTagSet.cs" />
+    <Compile Include="MetaTag.cs" />
     <Compile Include="PhotoFinisher.cs" />
     <Compile Include="ProcessFileInfo.cs" />
     <Compile Include="Program.cs" />

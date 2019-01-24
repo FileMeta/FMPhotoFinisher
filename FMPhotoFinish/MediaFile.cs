@@ -1088,11 +1088,11 @@ namespace FMPhotoFinish
                 string arguments;
                 if (m_mediaType == MediaType.Video)
                 {
-                    arguments = $"-hide_banner -i {m_filepath} {c_ffmpegVideoSettings} {c_ffmpegAudioSettings} {newPath}";
+                    arguments = $"-hide_banner -i \"{m_filepath}\" {c_ffmpegVideoSettings} {c_ffmpegAudioSettings} \"{newPath}\"";
                 }
                 else if (m_mediaType == MediaType.Audio)
                 {
-                    arguments = $"-hide_banner -i {m_filepath} {c_ffmpegAudioSettings} {newPath}";
+                    arguments = $"-hide_banner -i \"{m_filepath}\" {c_ffmpegAudioSettings} \"{newPath}\"";
                 }
                 else
                 {

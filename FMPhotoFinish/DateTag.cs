@@ -3,9 +3,9 @@
 name: DateTag.cs
 description: CodeBit class that represents a Date metadata tag including DateTime, TimeZone, and Precision components. Includes parsing and formatting methods.
 url: https://raw.githubusercontent.com/FileMeta/DateTag/master/DateTag.cs
-version: 1.0
+version: 1.2
 keywords: CodeBit
-dateModified: 2019-01-23
+dateModified: 2019-01-30
 license: https://opensource.org/licenses/BSD-3-Clause
 dependsOn: https://raw.githubusercontent.com/FileMeta/TimeZoneTag/master/TimeZoneTag.cs
 # Metadata in MicroYaml format. See http://filemeta.org/CodeBit.html
@@ -46,9 +46,8 @@ POSSIBILITY OF SUCH DAMAGE.
 */
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
+using System.Globalization;
 
 namespace FileMeta
 {
@@ -253,14 +252,244 @@ namespace FileMeta
             return PrecisionTick;
         }
 
+        /// <summary>
+        /// Adapts a custom date-time format string to the specified precision
+        /// </summary>
+        /// <param name="datePrecision">The date precision between 4 and 21.</param>
+        /// <param name="cultureInfo">The <see cref="CultureInfo"/> associated with the format to be displayed.</param>
+        /// <param name="customFormat">A custom Date-Time format string.</param>
+        /// <returns>A custom date-time format string that only includes the elements appropriate for the specified precision.</returns>
+        /// <remarks>
+        /// <para>The input string should be a custom date-time format string that contains all of the
+        /// elements that the application may require. For example, the default U.S. english format is
+        /// "dddd, MMMM dd, yyyy h:mm:ss tt". While preserving order, this method will remove elements and
+        /// associated delimiters from the string that are beyond the specified precision level.
+        /// </para>
+        /// </remarks>
+        public static string PrecisionAdaptFormatString(int datePrecision, string customFormat)
+        {
+            // Strip out all percent characters. They are most likely unnecessary.
+            // We'll add one back in at the end if it turns out to be important.
+            customFormat = customFormat.Replace("%", null);
+
+            if (datePrecision > PrecisionSecond)
+            {
+                customFormat = LimitFormatComponent(customFormat, 'F', datePrecision - PrecisionSecond);
+                customFormat = LimitFormatComponent(customFormat, 'f', datePrecision - PrecisionSecond);
+
+                // Obscure case where we produced a format string with just formatting character, have to prefix with '%'
+                if (customFormat.Length == 1 && IsDateFormatChar(customFormat[0]))
+                    customFormat = string.Concat("%", customFormat);
+
+                return customFormat;          
+            }
+
+            if (datePrecision <= PrecisionSecond)
+            {
+                customFormat = RemoveFormatComponent(customFormat, 'F');
+                customFormat = RemoveFormatComponent(customFormat, 'f');
+            }
+            if (datePrecision < PrecisionSecond)
+            {
+                customFormat = RemoveFormatComponent(customFormat, 's');
+            }
+            if (datePrecision < PrecisionMinute)
+            {
+                customFormat = RemoveFormatComponent(customFormat, 'm');
+            }
+            if (datePrecision < PrecisionHour)
+            {
+                customFormat = RemoveFormatComponent(customFormat, 'H'); // 24-hour format
+                customFormat = RemoveFormatComponent(customFormat, 'h'); // 12-hour format
+                customFormat = RemoveFormatComponent(customFormat, 'K'); // Timezone info
+                customFormat = RemoveFormatComponent(customFormat, 'z'); // Timezone offset
+                customFormat = RemoveFormatComponent(customFormat, 't'); // AM/PM
+            }
+            if (datePrecision < PrecisionDay)
+            {
+                customFormat = RemoveFormatComponent(customFormat, 'd'); // Captures both day of month and day of week
+            }
+            if (datePrecision < PrecisionMonth)
+            {
+                customFormat = RemoveFormatComponent(customFormat, 'M'); // Captures both day of month and day of week
+            }
+            // For precisions lower than month or year, still include the year.
+
+            // Obscure case where we produced a format string with just formatting character, have to prefix with '%'
+            if (customFormat.Length == 1 && IsDateFormatChar(customFormat[0]))
+                customFormat = string.Concat("%", customFormat);
+
+            return customFormat;
+        }
+
+        // Support for PrecisionAdaptFormatString
+        // Remove a formatting component and preceding or succeeding literals
+        private static string RemoveFormatComponent(string format, char compChar)
+        {
+            int preLiteral = int.MaxValue; // Start of preceding literal segment.
+            int i = 0;
+
+            while (i < format.Length)
+            {
+                // if the component was found, remove it.
+                if (format[i] == compChar)
+                {
+                    int compStart = i;
+                    do { ++i; } while (i < format.Length && format[i] == compChar);
+
+                    // Special case for commas following days (strange American formatting)
+                    if (compChar == 'd' && i < format.Length && format[i] == ',')
+                        ++i;
+
+                    // If we found a leading delimiter, remove it and the component
+                    if (preLiteral < compStart)
+                    {
+                        format = format.Remove(preLiteral, i - preLiteral);
+                        i = preLiteral;
+                    }
+
+                    // Else, remove the component plus trailing delimiters
+                    else
+                    {
+                        i = SkipLiterals(format, i);
+                        format = format.Remove(compStart, i - compStart);
+                        i = compStart;
+                    }
+                    preLiteral = int.MaxValue;
+                }
+
+                // If some other component, skip it
+                else if (IsDateFormatChar(format[i]))
+                {
+                    char c = format[i];
+                    do { ++i; } while (i < format.Length && format[i] == c);
+                    preLiteral = int.MaxValue;
+                }
+
+                // Else, skip the literal sequence
+                else
+                {
+                    preLiteral = i;
+                    i = SkipLiterals(format, i);
+                }
+            }
+
+            return format;
+        }
+
+        // Support for PrecisionAdaptFormatString
+        // Indicate whether this is a date formatting character (otherwise it's a literal)
+        private static bool IsDateFormatChar(char c)
+        {
+            // This is the most efficient way to code it because the compiler implements
+            // a fast selection algorithm.
+            switch (c)
+            {
+                case 'F': return true;
+                case 'H': return true;
+                case 'K': return true;
+                case 'M': return true;
+                case 'd': return true;
+                case 'f': return true;
+                case 'g': return true;
+                case 'h': return true;
+                case 'm': return true;
+                case 's': return true;
+                case 't': return true;
+                case 'y': return true;
+                case 'z': return true;
+                default: return false;
+            }
+        }
+
+        // Support for PrecisionAdaptFormatString
+        // Limit a format component (always fractions of a second) to the specified number of characters.
+        // So, for example, the fraction may be limited to 3 digits (milliseconds)
+        private static string LimitFormatComponent(string format, char compChar, int maxCount)
+        {
+            System.Diagnostics.Debug.Assert(maxCount > 0);
+            int i = 0;
+
+            while (i < format.Length)
+            {
+                if (format[i] == compChar)
+                {
+                    int compStart = i;
+                    do { ++i; } while (i < format.Length && format[i] == compChar);
+                    if (i-compStart > maxCount)
+                    {
+                        format = format.Remove(compStart, (i - compStart) - maxCount);
+                        i = compStart + maxCount;
+                    }
+                }
+                else if (IsDateFormatChar(format[i]))
+                {
+                    ++i;
+                }
+                else
+                {
+                    i = SkipLiterals(format, i);
+                }
+            }
+
+            return format;
+        }
+
+        // Support for PrecisionAdaptFormatString
+        // Skip a sequence of literals in a format string
+        private static int SkipLiterals(string format, int pos)
+        {
+            int end = format.Length;
+            while (pos < end && !IsDateFormatChar(format[pos]))
+            {
+                if (format[pos] == '\\')
+                {
+                    ++pos; // skip the following character
+                }
+                else if (format[pos] == '"')
+                {
+                    ++pos;
+                    while (pos < end && format[pos] != '"')
+                        ++pos;
+                }
+                else if (format[pos] == '\'')
+                {
+                    ++pos;
+                    while (pos < end && format[pos] != '\'')
+                        ++pos;
+                }
+                if (pos < end) ++pos; // Skip one more character
+            }
+            return pos;
+        }
+
+
         #endregion
+
+        #region Member Variables
+
+        long m_dateTicks;
+
+        #endregion
+
 
         #region Public Properties
 
         /// <summary>
-        /// The date value. Always in local time unless TimeZoneTag is ForceUtc.
+        /// The date value in ticks.
         /// </summary>
-        public DateTime Date { get; private set; }
+        /// <seealso cref="DateTime.Ticks"/>
+        public long Ticks { get { return m_dateTicks; } }
+
+        /// <summary>
+        /// The <see cref="DateTime"/> value. Always uses <see cref="DateTimeKind.Local"/> even if TimeZoneTag is ForceUtc.
+        /// </summary>
+        public DateTime Date { get { return new DateTime(m_dateTicks, DateTimeKind.Local); } }
+
+        /// <summary>
+        /// The <see cref="DateTime"/> value in UTC. Always uses <see cref="DateTimeKind.Utc"/> even if TimeZoneTag is ForceLocal.
+        /// </summary>
+        public DateTime DateUtc { get { return TimeZone.ToUtc(Date); } }
 
         /// <summary>
         /// The timezone value. Not relevant if precision is less than 10.
@@ -291,9 +520,9 @@ namespace FileMeta
         /// then set to maximum (<see cref="PrecisionMax"/>).</param>
         /// <remarks>
         /// <para>If timeZone is null, the timezone will be set to <see cref="TimeZoneTag.ForceLocal"/>
-        /// if the <paramref name="date"/> <see cref="DateTime.Kind"/> is <see cref="DateTimeKind.Local"/>,
-        /// to <see cref="TimeZoneTag.ForceUtc"/> if <see cref="DateTime.Kind"/> is <see cref="DateTimeKind.Utc"/>,
-        /// and to <see cref="TimeZoneTag.Unknown"/> if <see cref="DateTime.Kind"/> is <see cref="DateTimeKind.Unspecified"/>.
+        /// if the <paramref name="date"/> <see cref="DateTime.Kind"/> is <see cref="DateTimeKind.Local"/>
+        /// or <see cref="TimeZoneTag.Unknown"/>, and to <see cref="TimeZoneTag.ForceUtc"/> if
+        /// <see cref="DateTime.Kind"/> is <see cref="DateTimeKind.Utc"/>.
         /// </para>
         /// <para>If precision is zero, the precision is detected by the number of trailing zeros
         /// after the seconds decimal point. The lowest precision detected is <see cref="PrecisionSecond"/>.
@@ -321,37 +550,68 @@ namespace FileMeta
                 }
             }
 
-            // Change date to a compatible timezone (does nothing if already compatible).
-            else
+            // Change date to a local timezone if needed
+            if (date.Kind == DateTimeKind.Utc)
             {
-                switch (timeZone.Kind)
-                {
-                    case TimeZoneKind.Normal:
-                    case TimeZoneKind.ForceLocal:
-                        date = timeZone.ToLocal(date);
-                        break;
-
-                    case TimeZoneKind.ForceUtc:
-                        date = timeZone.ToUtc(date);
-                        break;
-                }
+                date = timeZone.ToLocal(date);
             }
 
             // Limit precision to compatible range
             if (precision > PrecisionMax) precision = PrecisionMax;
-            if (precision < PrecisionMin) precision = DetectPrecision(date);          
+            if (precision < PrecisionMin) precision = DetectPrecision(date);
 
-            Date = date;
+            m_dateTicks = date.Ticks;
             TimeZone = timeZone;
             Precision = precision;
         }
 
         /// <summary>
+        /// Constructs a DateTag from constituent values
+        /// </summary>
+        /// <param name="date">A <see cref="DateTime"/> value.</param>
+        /// <param name="timeZone">A <see cref="TimeZoneInfo"/> value.</param>
+        /// <param name="precision">Precision in terms of significant digits. If zero
+        /// then set to maximum (<see cref="PrecisionMax"/>).</param>
+        /// <remarks>
+        /// <para>The TimeZoneTag component is derived using <see cref="TimeZoneInfo.GetUtcOffset(DateTime)"/>
+        /// </para>
+        /// <para>If precision is zero, the precision is detected by the number of trailing zeros
+        /// after the seconds decimal point. The lowest precision detected is <see cref="PrecisionSecond"/>.
+        /// See <see cref="DetectPrecision(DateTime)"/>.
+        /// </para>
+        /// </remarks>
+        public DateTag(DateTime date, TimeZoneInfo timeZone, int precision = 0)
+            : this(date, new TimeZoneTag(timeZone.GetUtcOffset(date)), precision)
+        {
+        }
+
+        /// <summary>
+        /// Constructs a DateTag from a DateTimeOffset and precision
+        /// </summary>
+        /// <param name="date">A <see cref="DateTimeOffset"/> value.</param>
+        /// <param name="precision">Precision in terms of significant digits. If zero
+        /// then set to maximum (<see cref="PrecisionMax"/>).</param>
+        /// <remarks>
+        /// <para>The TimeZoneTag component is trawn from <see cref="DateTimeOffset.Offset"/>
+        /// </para>
+        /// <para>If precision is zero, the precision is detected by the number of trailing zeros
+        /// after the seconds decimal point. The lowest precision detected is <see cref="PrecisionSecond"/>.
+        /// See <see cref="DetectPrecision(DateTime)"/>.
+        /// </para>
+        /// </remarks>
+        public DateTag(DateTimeOffset date, int precision = 0)
+            : this(new DateTime(date.Ticks, DateTimeKind.Local), new TimeZoneTag(date.Offset), precision)
+        {
+        }
+
+        /// <summary>
         /// If TimeZone.Kind is <see cref="TimeZoneKind.ForceLocal"/> or <see cref="TimeZoneKind.ForceUtc"/>
-        /// resolves the timezone offset according to the default passed in. Else does nothing.
+        /// resolves the timezone offset according to the default passed in. Else returns the DateTag
+        /// unchanged.
         /// </summary>
         /// <param name="defaultTimeZone">The default <see cref="TimeZoneInfo"/> with which to resolve
-        /// thei timezone. Use <see cref="TimeZoneInfo.Local"/> for the current system timezone.
+        /// the timezone if none is already available. Use <see cref="TimeZoneInfo.Local"/> for the
+        /// current system timezone.
         /// </param>
         /// <returns>A <see cref="TimeZoneTag"/> in which the TimeZone offset has been resolved.</returns>
         /// <remarks>
@@ -364,51 +624,153 @@ namespace FileMeta
         /// <para>This method updates the timezone to the default ONLY if the existing value
         /// is either <see cref="TimeZoneKind.ForceLocal"/> or <see cref="TimeZoneKind.ForceUtc"/>.
         /// </para>
+        /// <para>When <see cref="TimeZone"/> is <see cref="TimeZoneKind.ForceLocal"/>, the value of
+        /// <see cref="Date"/> will be the same in the resulting output while the value of <see cref="DateUtc"/>
+        /// will be adjusted according to the appropriate timezone offset. When <see cref="TimeZone"/> is
+        /// <see cref="TimeZoneKind.ForceUtc"/> then the value of <see cref="DateUtc"/> will be the same
+        /// in original and returned values while the value of <see cref="Date"/> will be adjusted according
+        /// to the appropriate TimeZone offset.
+        /// </para>
         /// </remarks>
         public DateTag ResolveTimeZone(TimeZoneInfo defaultTimeZone)
         {
             if (TimeZone.Kind == TimeZoneKind.Normal) return this;
 
-            var tz = new TimeZoneTag(defaultTimeZone.GetUtcOffset(Date), TimeZoneKind.Normal);
-            return new DateTag(Date, tz, Precision);
+            if (TimeZone.Kind == TimeZoneKind.ForceUtc)
+            {
+                return new DateTag(DateUtc,
+                    new TimeZoneTag(defaultTimeZone.GetUtcOffset(DateUtc), TimeZoneKind.Normal),
+                    Precision);
+            }
+            else
+            {
+                System.Diagnostics.Debug.Assert(TimeZone.Kind == TimeZoneKind.ForceLocal);
+                return new DateTag(Date,
+                    new TimeZoneTag(defaultTimeZone.GetUtcOffset(Date), TimeZoneKind.Normal),
+                    Precision);
+            }
         }
 
         /// <summary>
-        /// Convert the <see cref="Date"/> value to UTC (if it is not already).
+        /// Convert to <see cref="DateTimeOffset"/>
         /// </summary>
-        /// <returns>A <see cref="DateTime"/> with a <see cref="DateTimeKind"/> of <see cref="DateTimeKind.Utc"/>.</returns>
-        /// <remarks>
-        /// <para>If the <see cref="Date"/> is <see cref="DateTimeKind.Local"/> then the value is converted to
-        /// UTC using the offset in <see cref="TimeZone"/>.
-        /// </para>
-        /// <para>If <see cref="TimeZone.Kind"/> is <see cref="TimeZoneKind.ForceLocal"/> then the returned value
-        /// will have unchanged time but with <see cref="DateTime.Kind"/> changed to <see cref="DateTimeKind.Utc"/>.
-        /// This may or may not be the needed behavior. A prior call to <see cref="ResolveTimeZone"/> may be necessary
-        /// to achieve the desired results.
-        /// </para>
-        /// </remarks>
-        public DateTime ToUtc()
+        /// <returns>A <see cref="DateTimeOffset"/> matching the local time and timezone offset of the <see cref="DateTag"/>.</returns>
+        public DateTimeOffset ToDateTimeOffset()
         {
-            return TimeZone.ToUtc(Date);
+            return TimeZone.ToDateTimeOffset(Date);
         }
 
         /// <summary>
-        /// Convert the <see cref="Date"/> value to Local (if it is not already).
+        /// Renders a human-friendly string much like "Sat, 8 Dec 2018, 4:25 PM"
         /// </summary>
-        /// <returns>A <see cref="DateTime"/> with a <see cref="DateTimeKind"/> of <see cref="DateTimeKind.Local"/>.</returns>
+        /// <param name="format">A custom format string or null to use <see cref="DateTimeFormatInfo.FullDateTimePattern"/>.</param>
+        /// <param name="cultureInfo">The CultureInfo for localization purposes or null to use <see cref="CultureInfo.CurrentCulture"/>.</param>
+        /// <returns>The human-friendly string</returns>
         /// <remarks>
-        /// <para>If the <see cref="Date"/> is <see cref="DateTimeKind.Utc"/> then the value is converted to
-        /// Local using the offset in <see cref="TimeZone"/>. If the Date is already local then the result is unchanged.
+        /// <para>Local time will be used unless utcDefault is true, or the standard date and
+        /// time format string "r", "R", "u" or "U" is specified.
         /// </para>
-        /// <para>If <see cref="TimeZone.Kind"/> is <see cref="TimeZoneKind.ForceUtc"/> then the returned value
-        /// will have unchanged time but with <see cref="DateTime.Kind"/> changed to <see cref="DateTimeKind.Utc"/>.
-        /// This may or may not be the needed behavior. A prior call to <see cref="ResolveTimeZone"/> may be necessary
-        /// to achieve the desired results.
+        /// <para>The result is sensitive to precision, and localized to <paramref name="cultureInfo"/>.
+        /// </para>
+        /// <para>
+        /// </para>
+        /// <para>If the timezone is unresolved (<see cref="TimeZone"/> is <see cref="TimeZoneKind.ForceLocal"/> or
+        /// <see cref="TimeZoneKind.ForceUtc"/>) then the current system timezone will be used for conversion
+        /// when necessary. If that is not the desired behavior then call <see cref="ResolveTimeZone(TimeZoneInfo)"/>
+        /// before using this method.
+        /// </para>
+        /// <para>Use <code>ToString(null)</code> to get default human-friendly formatting. Calling
+        /// <code>ToString()</code> will call the default function which returns the metadata
+        /// format.
         /// </para>
         /// </remarks>
-        public DateTime ToLocal()
+        public string ToString(string format, CultureInfo cultureInfo = null, bool utcDefault = false)
         {
-            return TimeZone.ToLocal(Date);
+            bool useUniversalTime = utcDefault;
+
+            if (cultureInfo == null) cultureInfo = CultureInfo.CurrentCulture;
+            if (format == null)
+            {
+                format = string.Concat(cultureInfo.DateTimeFormat.LongDatePattern, " ",
+                    cultureInfo.DateTimeFormat.LongTimePattern);
+            }
+            else if (format.Length == 1)
+            {
+                // Resolve standard format string into a custom format string
+                switch (format[0])
+                {
+                    case 'd':
+                        format = cultureInfo.DateTimeFormat.ShortDatePattern;
+                        break;
+                    case 'D':
+                        format = cultureInfo.DateTimeFormat.LongDatePattern;
+                        break;
+                    case 'f': // Full date/time pattern (short time)
+                        format = string.Concat(cultureInfo.DateTimeFormat.LongDatePattern, " ",
+                            cultureInfo.DateTimeFormat.ShortTimePattern);
+                        break;
+                    case 'F': // Full date/time pattern (long time)
+                        format = string.Concat(cultureInfo.DateTimeFormat.LongDatePattern, " ",
+                            cultureInfo.DateTimeFormat.LongTimePattern);
+                        break;
+                    case 'g':
+                        format = string.Concat(cultureInfo.DateTimeFormat.ShortDatePattern, " ",
+                            cultureInfo.DateTimeFormat.ShortTimePattern);
+                        break;
+                    case 'G':
+                        format = string.Concat(cultureInfo.DateTimeFormat.ShortDatePattern, " ",
+                            cultureInfo.DateTimeFormat.LongTimePattern);
+                        break;
+                    case 'M':
+                    case 'm':
+                        format = cultureInfo.DateTimeFormat.MonthDayPattern;
+                        break;
+                    case 'O':
+                    case 'o':
+                        format = "yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fffffff";
+                        break;
+                    case 'R':
+                    case 'r':
+                        useUniversalTime = true;
+                        format = cultureInfo.DateTimeFormat.RFC1123Pattern;
+                        break;
+                    case 's':
+                        format = cultureInfo.DateTimeFormat.SortableDateTimePattern;
+                        break;
+                    case 't':
+                        format = cultureInfo.DateTimeFormat.ShortTimePattern;
+                        break;
+                    case 'T':
+                        format = cultureInfo.DateTimeFormat.LongTimePattern;
+                        break;
+                    case 'u':
+                        useUniversalTime = true;
+                        format = cultureInfo.DateTimeFormat.SortableDateTimePattern;
+                        break;
+                    case 'U':
+                        useUniversalTime = true;
+                        format = string.Concat(cultureInfo.DateTimeFormat.LongDatePattern, " ",
+                            cultureInfo.DateTimeFormat.LongTimePattern);
+                        break;
+                    case 'Y':
+                    case 'y':
+                        format = cultureInfo.DateTimeFormat.YearMonthPattern;
+                        break;
+                    default:
+                        throw new FormatException("Unknown standard DateTime format string: " + format);
+                }
+            }
+
+            format = PrecisionAdaptFormatString(Precision, format);
+
+            if (useUniversalTime)
+            {
+                return ResolveTimeZone(TimeZoneInfo.Local).DateUtc.ToString(format, cultureInfo);
+            }
+            else
+            {
+                return ResolveTimeZone(TimeZoneInfo.Local).ToDateTimeOffset().ToString(format, cultureInfo);
+            }
         }
 
         #endregion Constructor and Methods
@@ -416,7 +778,7 @@ namespace FileMeta
         #region Standard Methods
 
         /// <summary>
-        /// Formats a <see cref="DateTag"/> into adate metadata value
+        /// Formats a <see cref="DateTag"/> into a date metadata value
         /// according to the <see cref="https://www.w3.org/TR/NOTE-datetime">W3CDTF</see> standard.
         /// </summary>
         /// <remarks>
@@ -427,39 +789,35 @@ namespace FileMeta
         /// </remarks>
         public override string ToString()
         {
-            if (TimeZone.Kind == TimeZoneKind.Normal && Date.Kind == DateTimeKind.Utc)
-            {
-                Date = TimeZone.ToLocal(Date);
-            }
-
+            var date = Date;
             var sb = new StringBuilder();
-            sb.AppendFormat("{0:D4}", Date.Year);
+            sb.AppendFormat("{0:D4}", date.Year);
             if (Precision >= 6)
             {
-                sb.AppendFormat("-{0:D2}", Date.Month);
+                sb.AppendFormat("-{0:D2}", date.Month);
             }
             if (Precision >= 8)
             {
-                sb.AppendFormat("-{0:D2}", Date.Day);
+                sb.AppendFormat("-{0:D2}", date.Day);
             }
             if (Precision >= 10)
             {
-                sb.AppendFormat("T{0:D2}", Date.Hour);
+                sb.AppendFormat("T{0:D2}", date.Hour);
             }
             if (Precision >= 12)
             {
-                sb.AppendFormat(":{0:D2}", Date.Minute);
+                sb.AppendFormat(":{0:D2}", date.Minute);
             }
             if (Precision >= 14)
             {
-                sb.AppendFormat(":{0:D2}", Date.Second);
+                sb.AppendFormat(":{0:D2}", date.Second);
             }
             if (Precision > 14)
             {
                 int decimals = Precision - 14;
                 if (decimals > 7) decimals = 7;
                 sb.Append('.');
-                long ticks = Date.Ticks % c_ticksPerSecond;
+                long ticks = date.Ticks % c_ticksPerSecond;
                 long pow = c_ticksPerSecond / 10;
                 for (int i = 0; i < decimals; ++i)
                 {
@@ -478,7 +836,7 @@ namespace FileMeta
         public bool Equals(DateTag obj)
         {
             if (obj == null) return false;
-            return Date.Equals(obj.Date) && TimeZone.Equals(obj.TimeZone) && Precision.Equals(obj.Precision);
+            return m_dateTicks == obj.m_dateTicks && TimeZone.Equals(obj.TimeZone) && Precision == obj.Precision;
         }
 
         public override bool Equals(object obj)

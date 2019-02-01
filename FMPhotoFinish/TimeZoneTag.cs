@@ -3,9 +3,9 @@
 name: TimeZoneTag.cs
 description: CodeBit class that represents a timezone offset, parses and formats the timezone information into a metadata tag.
 url: https://raw.githubusercontent.com/FileMeta/TimeZoneTag/master/TimeZoneTag.cs
-version: 1.0
+version: 1.2
 keywords: CodeBit
-dateModified: 2019-01-10
+dateModified: 2019-01-31
 license: https://opensource.org/licenses/BSD-3-Clause
 # Metadata in MicroYaml format. See http://filemeta.org/CodeBit.html
 ...
@@ -127,6 +127,8 @@ namespace FileMeta
         const string c_utc = "Z";
         const long c_ticksPerSecond = 10000000;
         const long c_ticksPerMinute = 60 * c_ticksPerSecond;
+        const int c_maxOffset = 14 * 60;
+        const int c_minOffset = -14 * 60;
 
         #endregion Constants
 
@@ -190,7 +192,7 @@ namespace FileMeta
             if (parts.Length < 1 || parts.Length > 2) return false;
             int hours;
             if (!int.TryParse(parts[0], out hours)) return false;
-            if (hours < 0 || hours > 23) return false;
+            if (hours < 0) return false;
 
             int minutes = 0;
             if (parts.Length > 1)
@@ -201,6 +203,7 @@ namespace FileMeta
 
             int totalMinutes = hours * 60 + minutes;
             if (negative) totalMinutes = -totalMinutes;
+            if (totalMinutes < c_minOffset || totalMinutes > c_maxOffset) return false;
             result = new TimeZoneTag(totalMinutes, TimeZoneKind.Normal);
             return true;
         }
@@ -268,7 +271,7 @@ namespace FileMeta
         /// <remarks>If <paramref name="kind"/> is other than <see cref="TimeZoneKind.Normal"/>
         /// then <paramref name="offsetMinutes"/> is forced to zero.
         /// </remarks>
-        public TimeZoneTag(int offsetMinutes, TimeZoneKind kind)
+        public TimeZoneTag(int offsetMinutes, TimeZoneKind kind = TimeZoneKind.Normal)
         {
             m_offset = (kind == TimeZoneKind.Normal) ? offsetMinutes : 0;
             Kind = kind;
@@ -282,7 +285,7 @@ namespace FileMeta
         /// <remarks>If <paramref name="kind"/> is other than <see cref="TimeZoneKind.Normal"/>
         /// then <paramref name="offsetTicks"/> is forced to zero.
         /// </remarks>
-        public TimeZoneTag(long offsetTicks, TimeZoneKind kind)
+        public TimeZoneTag(long offsetTicks, TimeZoneKind kind = TimeZoneKind.Normal)
         {
             m_offset = (kind == TimeZoneKind.Normal) ? (int)(offsetTicks / c_ticksPerMinute) : 0;
             Kind = kind;
@@ -299,7 +302,7 @@ namespace FileMeta
         /// <remarks>If <paramref name="kind"/> is other than <see cref="TimeZoneKind.Normal"/>
         /// then <paramref name="offset"/> is forced to zero.
         /// </remarks>
-        public TimeZoneTag(TimeSpan offset, TimeZoneKind kind)
+        public TimeZoneTag(TimeSpan offset, TimeZoneKind kind = TimeZoneKind.Normal)
         {
             m_offset = (kind == TimeZoneKind.Normal) ? (int)(offset.Ticks / c_ticksPerMinute) : 0;
             Kind = kind;
@@ -331,6 +334,21 @@ namespace FileMeta
         {
             if (date.Kind == DateTimeKind.Local) return date;
             return new DateTime(date.Ticks + (m_offset * c_ticksPerMinute), DateTimeKind.Local);
+        }
+
+        /// <summary>
+        /// Convert a <see cref="DateTime"/> to a <see cref="DateTimeOffset"/>
+        /// </summary>
+        /// <param name="date">The <see cref="DateTime"/> to convert.</param>
+        /// <returns>A <see cref="DateTimeOffset"/>.</returns>
+        /// <remarks>
+        /// <para>If <paramref name="date"/> is <see cref="DateTimeKind.Utc"/>, first converts
+        /// to local time as that is what is expected in <see cref="DateTimeOffset"/>.
+        /// </para>
+        /// </remarks>
+        public DateTimeOffset ToDateTimeOffset(DateTime date)
+        {
+            return new DateTimeOffset(ToLocal(date).Ticks, TimeSpan.FromMinutes(m_offset));
         }
 
         /// <summary>

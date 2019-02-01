@@ -573,8 +573,8 @@ Timezones:
                                     dtTarget.ResolveTimeZone(TimeZoneInfo.Local);
                                     dtSource.ResolveTimeZone(TimeZoneInfo.Local);
 
-                                    // For whatever reason, they might have used different timezones. Shift both to Utc before taking difference.
-                                    photoFinisher.ShiftDateBy = dtTarget.ToUtc().Subtract(dtSource.ToUtc());
+                                    // For whatever reason, they might have used different timezones. Take the difference between the UTC versions.
+                                    photoFinisher.ShiftDateBy = dtTarget.DateUtc.Subtract(dtSource.DateUtc);
                                 }
                             }
                             break;

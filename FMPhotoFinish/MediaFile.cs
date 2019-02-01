@@ -502,7 +502,7 @@ namespace FMPhotoFinish
             if (!m_creationDate.HasValue) return false;
 
             // Get a local dateTime for the file
-            var dt = CreationDate.ResolveTimeZone(TimeZoneInfo.Local).ToLocal();
+            var dt = CreationDate.ResolveTimeZone(TimeZoneInfo.Local).Date;
 
             string newName = dt.ToString("yyyy-MM-dd_HHmmss",
                 System.Globalization.CultureInfo.InvariantCulture);
@@ -538,7 +538,7 @@ namespace FMPhotoFinish
             if (!m_creationDate.HasValue) return false;
 
             // Get a local dateTime for the file
-            var dt = CreationDate.ResolveTimeZone(TimeZoneInfo.Local).ToLocal();
+            var dt = CreationDate.ResolveTimeZone(TimeZoneInfo.Local).Date;
 
             // Create the directory string year\month\day
             // This part deliberately uses cultural-sensitive encoding so a system configured for French will use French month and day names.
@@ -855,7 +855,7 @@ namespace FMPhotoFinish
             if (!m_creationDate.HasValue) return false;
 
             // Convert to UTC
-            DateTime dateUtc = CreationDate.ResolveTimeZone(TimeZoneInfo.Local).ToUtc();
+            DateTime dateUtc = CreationDate.ResolveTimeZone(TimeZoneInfo.Local).DateUtc;
 
             File.SetCreationTimeUtc(m_filepath, dateUtc);
             return true;
@@ -875,7 +875,7 @@ namespace FMPhotoFinish
             if (!m_creationDate.HasValue) return false;
 
             // Convert to UTC
-            DateTime dateUtc = CreationDate.ResolveTimeZone(TimeZoneInfo.Local).ToUtc();
+            DateTime dateUtc = CreationDate.ResolveTimeZone(TimeZoneInfo.Local).DateUtc;
 
             File.SetLastWriteTimeUtc(m_filepath, dateUtc);
             return true;

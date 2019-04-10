@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 using FileMeta;
+using Interop;
 
 namespace FMPhotoFinish
 {
@@ -484,7 +485,8 @@ namespace FMPhotoFinish
         /// <summary>
         /// Change the filename to be based on the date the photo was taken plus subject and title metadata
         /// </summary>
-        /// <returns>True if the name was changed. False if the photo has no DateTaken metadata.</returns>
+        /// <returns>True if the name was changed. False if the name was not changed either because it already
+        /// matches the metadata or because the photo has no DateTaken metadata.</returns>
         /// <remarks>
         /// <para>The new filename pattern is: yyyy-mm-dd_hhmmss &lt;subject&gt; - &lt;title&gt;.jpg.
         /// For example, "2019-01-15_142022 Mirror Lake - John Fishing.jpg".
@@ -519,6 +521,8 @@ namespace FMPhotoFinish
             }
 
             newName = string.Concat(newName, Path.GetExtension(m_filepath));
+            if (string.Equals(newName, Path.GetFileName(m_filepath), StringComparison.OrdinalIgnoreCase))
+                return false;   // Filename already matches the metadata
 
             // Change the filename
             string dstPath = Path.Combine(Path.GetDirectoryName(m_filepath), newName);
@@ -1234,20 +1238,20 @@ namespace FMPhotoFinish
     /// </summary>
     static class PropertyKeys
     {
-        public static PROPERTYKEY ItemDate = new PROPERTYKEY("f7db74b4-4287-4103-afba-f1b13dcd75cf", 100); // System.ItemDate
-        public static PROPERTYKEY DateEncoded = new PROPERTYKEY("2e4b640d-5019-46d8-8881-55414cc5caa0", 100); // System.Media.DateEncoded
-        public static PROPERTYKEY DateTaken = new PROPERTYKEY("14b81da1-0135-4d31-96d9-6cbfc9671a99", 36867); // System.Photo.DateTaken
-        public static PROPERTYKEY DateCreated = new PROPERTYKEY("b725f130-47ef-101a-a5f1-02608c9eebac", 15); // System.DateCreated (from file system)
-        public static PROPERTYKEY DateModified = new PROPERTYKEY("b725f130-47ef-101a-a5f1-02608c9eebac", 14); // System.DateModified (from file system)
-        public static PROPERTYKEY Keywords = new PROPERTYKEY("f29f85e0-4ff9-1068-ab91-08002b27b3d9", 5); // System.Keywords (tags)
-        public static PROPERTYKEY Orientation = new PROPERTYKEY("14B81DA1-0135-4D31-96D9-6CBFC9671A99", 274);
-        public static PROPERTYKEY Duration = new PROPERTYKEY("64440490-4C8B-11D1-8B70-080036B11A03", 3);
-        public static PROPERTYKEY Make = new PROPERTYKEY("14b81da1-0135-4d31-96d9-6cbfc9671a99", 271); // System.Photo.CameraManufacturer
-        public static PROPERTYKEY Model = new PROPERTYKEY("14b81da1-0135-4d31-96d9-6cbfc9671a99", 272); // System.Photo.CameraModel
-        public static PROPERTYKEY ImageId = new PROPERTYKEY("10DABE05-32AA-4C29-BF1A-63E2D220587F", 100); // System.Image.ImageID
-        public static PROPERTYKEY Comment = new PROPERTYKEY("F29F85E0-4FF9-1068-AB91-08002B27B3D9", 6); // 
-        public static PROPERTYKEY Subject = new PROPERTYKEY("F29F85E0-4FF9-1068-AB91-08002B27B3D9", 3); // System.Subject
-        public static PROPERTYKEY Title = new PROPERTYKEY("F29F85E0-4FF9-1068-AB91-08002B27B3D9", 2); // System.Title
+        public static PropertyKey ItemDate = new PropertyKey("f7db74b4-4287-4103-afba-f1b13dcd75cf", 100); // System.ItemDate
+        public static PropertyKey DateEncoded = new PropertyKey("2e4b640d-5019-46d8-8881-55414cc5caa0", 100); // System.Media.DateEncoded
+        public static PropertyKey DateTaken = new PropertyKey("14b81da1-0135-4d31-96d9-6cbfc9671a99", 36867); // System.Photo.DateTaken
+        public static PropertyKey DateCreated = new PropertyKey("b725f130-47ef-101a-a5f1-02608c9eebac", 15); // System.DateCreated (from file system)
+        public static PropertyKey DateModified = new PropertyKey("b725f130-47ef-101a-a5f1-02608c9eebac", 14); // System.DateModified (from file system)
+        public static PropertyKey Keywords = new PropertyKey("f29f85e0-4ff9-1068-ab91-08002b27b3d9", 5); // System.Keywords (tags)
+        public static PropertyKey Orientation = new PropertyKey("14B81DA1-0135-4D31-96D9-6CBFC9671A99", 274);
+        public static PropertyKey Duration = new PropertyKey("64440490-4C8B-11D1-8B70-080036B11A03", 3);
+        public static PropertyKey Make = new PropertyKey("14b81da1-0135-4d31-96d9-6cbfc9671a99", 271); // System.Photo.CameraManufacturer
+        public static PropertyKey Model = new PropertyKey("14b81da1-0135-4d31-96d9-6cbfc9671a99", 272); // System.Photo.CameraModel
+        public static PropertyKey ImageId = new PropertyKey("10DABE05-32AA-4C29-BF1A-63E2D220587F", 100); // System.Image.ImageID
+        public static PropertyKey Comment = new PropertyKey("F29F85E0-4FF9-1068-AB91-08002B27B3D9", 6); // 
+        public static PropertyKey Subject = new PropertyKey("F29F85E0-4FF9-1068-AB91-08002B27B3D9", 3); // System.Subject
+        public static PropertyKey Title = new PropertyKey("F29F85E0-4FF9-1068-AB91-08002B27B3D9", 2); // System.Title
     }
 
     /// <summary>

@@ -3,10 +3,11 @@
 name: WinShellPropertyStore.cs
 description: C# Wrapper for Windows Property System
 url: https://github.com/FileMeta/WinShellPropertyStore/raw/master/WinShellPropertyStore.cs
-version: 1.6
+version: 1.7
 keywords: CodeBit
-dateModified: 2018-12-13
+dateModified: 2019-04-10
 license: http://unlicense.org
+dependsOn: https://github.com/FileMeta/WinShellPropertyStore/raw/master/PropVariant.cs https://github.com/FileMeta/WinShellPropertyStore/raw/master/PropertyKey.cs
 # Metadata in MicroYaml format. See http://filemeta.org and http://schema.org
 ...
 */
@@ -51,6 +52,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Interop;
 
 namespace WinShell
 {
@@ -69,10 +71,10 @@ namespace WinShell
     {
 
 #if !RAW_PROPERTY_STORE
-        static PROPERTYKEY s_pkContentType = new PROPERTYKEY("D5CDD502-2E9C-101B-9397-08002B2CF9AE", 26); // System.ContentType
-        static PROPERTYKEY s_pkItemDate = new PROPERTYKEY("f7db74b4-4287-4103-afba-f1b13dcd75cf", 100); // System.ItemDate
-        static PROPERTYKEY s_pkDateTaken = new PROPERTYKEY("14B81DA1-0135-4D31-96D9-6CBFC9671A99", 36867);
-        static PROPERTYKEY s_pkDateEncoded = new PROPERTYKEY("2e4b640d-5019-46d8-8881-55414cc5caa0", 100); // System.Media.DateEncoded
+        static PropertyKey s_pkContentType = new PropertyKey("D5CDD502-2E9C-101B-9397-08002B2CF9AE", 26); // System.ContentType
+        static PropertyKey s_pkItemDate = new PropertyKey("f7db74b4-4287-4103-afba-f1b13dcd75cf", 100); // System.ItemDate
+        static PropertyKey s_pkDateTaken = new PropertyKey("14B81DA1-0135-4D31-96D9-6CBFC9671A99", 36867);
+        static PropertyKey s_pkDateEncoded = new PropertyKey("2e4b640d-5019-46d8-8881-55414cc5caa0", 100); // System.Media.DateEncoded
 #endif
 
         /// <summary>
@@ -122,15 +124,15 @@ namespace WinShell
         /// Gets a property key from an item's array of properties.
         /// </summary>
         /// <param name="index">The index of the property key in the property store's
-        /// array of <see cref="PROPERTYKEY"/> structures. This is a zero-based index.</param>
-        /// <returns>The <see cref="PROPERTYKEY"/> at the specified index.</returns>
+        /// array of <see cref="PropertyKey"/> structures. This is a zero-based index.</param>
+        /// <returns>The <see cref="PropertyKey"/> at the specified index.</returns>
         /// <remarks>
         /// This call, in combination with the <see cref="Count"/> property can be
         /// used to enumerate all properties in the PropertyStore.
         /// </remarks>
-        public PROPERTYKEY GetAt(int index)
+        public PropertyKey GetAt(int index)
         {
-            PROPERTYKEY key;
+            PropertyKey key;
             m_IPropertyStore.GetAt((uint)index, out key);
             return key;
         }
@@ -138,9 +140,9 @@ namespace WinShell
         /// <summary>
         /// Gets data for a specific property.
         /// </summary>
-        /// <param name="key">The <see cref="PROPERTYKEY"/> of the property to be retrieved.</param>
+        /// <param name="key">The <see cref="PropertyKey"/> of the property to be retrieved.</param>
         /// <returns>The data for the specified property or null if the item does not have the property.</returns>
-        public object GetValue(PROPERTYKEY key)
+        public object GetValue(PropertyKey key)
         {
             IntPtr pv = IntPtr.Zero;
             object value = null;
@@ -148,7 +150,7 @@ namespace WinShell
             {
                 pv = Marshal.AllocCoTaskMem(32); // Structure is 16 bytes in 32-bit windows and 24 bytes in 64-bit but we leave a few more bytes for good measure.
                 m_IPropertyStore.GetValue(key, pv);
-                value = PropertyStoreInterop.PropVariantToObject(pv);
+                value = PropVariant.GetObjectFromPropVariant(pv);
 
 #if !RAW_PROPERTY_STORE
                 // PropertyStore returns all DateTimes in UTC. However, DateTaken certain fields are stored in local time.
@@ -178,7 +180,7 @@ namespace WinShell
                 {
                     try
                     {
-                        PropertyStoreInterop.PropVariantClear(pv);
+                        PropVariant.PropVariantClear(pv);
                     }
                     catch
                     {
@@ -194,7 +196,7 @@ namespace WinShell
         /// <summary>
         /// Sets a new property value, or replaces or removes an existing value.
         /// </summary>
-        /// <param name="key">The <see cref="PROPERTYKEY"/> of the property to be set.</param>
+        /// <param name="key">The <see cref="PropertyKey"/> of the property to be set.</param>
         /// <param name="value">The value to be set. Managed code values are converted
         /// to the appropriate PROPVARIANT values.</param>
         /// <remarks>
@@ -209,7 +211,7 @@ namespace WinShell
         /// <para>Removal of a property is not supported by the Windows Property System.
         /// </para>
         /// </remarks>
-        public void SetValue(PROPERTYKEY key, object value)
+        public void SetValue(PropertyKey key, object value)
         {
             IntPtr pv = IntPtr.Zero;
             try
@@ -220,21 +222,22 @@ namespace WinShell
                     value = dt.ToUniversalTime();
                 }
 
-                pv = PropertyStoreInterop.PropVariantFromObject(value);
+                pv = Marshal.AllocCoTaskMem(PropVariant.sizeofPROPVARIANT);
+                PropVariant.GetPropVariantFromObject(value, pv);
                 m_IPropertyStore.SetValue(key, pv);
             }
             finally
             {
                 if (pv != IntPtr.Zero)
                 {
-                    PropertyStoreInterop.PropVariantClear(pv);
+                    PropVariant.PropVariantClear(pv);
                     Marshal.FreeCoTaskMem(pv);
                     pv = IntPtr.Zero;
                 }
             }
         }
 
-        public bool IsPropertyWriteable(PROPERTYKEY key)
+        public bool IsPropertyWriteable(PropertyKey key)
         {
             if (m_IPropertyStoreCapabilities == null)
             {
@@ -321,11 +324,11 @@ namespace WinShell
         }
 
         /// <summary>
-        /// Get the <see cref="PropertyDescription"/> for a particular <see cref="PROPERTYKEY"/>.
+        /// Get the <see cref="PropertyDescription"/> for a particular <see cref="PropertyKey"/>.
         /// </summary>
-        /// <param name="propKey">The <see cref="PROPERTYKEY"/> for which the description is to be retrieved.</param>
+        /// <param name="propKey">The <see cref="PropertyKey"/> for which the description is to be retrieved.</param>
         /// <returns>A <see cref="PropertyDescription"/>. Null if the PROPERTYKEY does not have a registered description.</returns>
-        public PropertyDescription GetPropertyDescription(PROPERTYKEY propKey)
+        public PropertyDescription GetPropertyDescription(PropertyKey propKey)
         {
             Int32 hResult;
             Guid IID_IPropertyDescription = typeof(PropertyStoreInterop.IPropertyDescription).GUID;
@@ -381,10 +384,10 @@ namespace WinShell
             }
         }
 
-        public PROPERTYKEY GetPropertyKeyByName(string canonicalName)
+        public PropertyKey GetPropertyKeyByName(string canonicalName)
         {
             Int32 hResult;
-            PROPERTYKEY propertyKey;    // Initializes automatically to all zeros
+            PropertyKey propertyKey;    // Initializes automatically to all zeros
 
             Guid IID_IPropertyDescription = typeof(PropertyStoreInterop.IPropertyDescription).GUID;
             PropertyStoreInterop.IPropertyDescription iPropertyDescription = null;
@@ -459,7 +462,7 @@ namespace WinShell
     /// </summary>
     public class PropertyDescription
     {
-        PROPERTYKEY m_propertyKey;
+        PropertyKey m_propertyKey;
         string m_canonicalName;
         string m_displayName;
         PROPDESC_TYPE_FLAGS m_typeFlags;
@@ -469,14 +472,14 @@ namespace WinShell
 #if !RAW_PROPERTY_STORE
         // These properties should be marked as innate or read-only but, at least in Windows 10,
         // they are not. If not RAW_PROPERTY_STORE compile-time option then we modify them.
-        static HashSet<PROPERTYKEY> s_ForceInnate = new HashSet<PROPERTYKEY>(
-            new PROPERTYKEY[]
+        static HashSet<PropertyKey> s_ForceInnate = new HashSet<PropertyKey>(
+            new PropertyKey[]
             {
-                new PROPERTYKEY("D5CDD502-2E9C-101B-9397-08002B2CF9AE", 26), // System.ContentType
-                new PROPERTYKEY("D6942081-D53B-443D-AD47-5E059D9CD27A", 2), // System.Shell.SFGAOFlagsStrings
-                new PROPERTYKEY("09329b74-40a3-4c68-bf07-af9a572f607c", 100), // System.IsFolder
-                new PROPERTYKEY("14b81da1-0135-4d31-96d9-6cbfc9671a99", 18258), // System.DateImported
-                new PROPERTYKEY("2e4b640d-5019-46d8-8881-55414cc5caa0", 100) // System.Media.DateEncoded
+                new PropertyKey("D5CDD502-2E9C-101B-9397-08002B2CF9AE", 26), // System.ContentType
+                new PropertyKey("D6942081-D53B-443D-AD47-5E059D9CD27A", 2), // System.Shell.SFGAOFlagsStrings
+                new PropertyKey("09329b74-40a3-4c68-bf07-af9a572f607c", 100), // System.IsFolder
+                new PropertyKey("14b81da1-0135-4d31-96d9-6cbfc9671a99", 18258), // System.DateImported
+                new PropertyKey("2e4b640d-5019-46d8-8881-55414cc5caa0", 100) // System.Media.DateEncoded
     });
 #endif
 
@@ -579,9 +582,9 @@ namespace WinShell
         }
 
         /// <summary>
-        /// The <see cref="PROPERTYKEY"/> that identifies the property.
+        /// The <see cref="WinShell.PropertyKey"/> that identifies the property.
         /// </summary>
-        public PROPERTYKEY PropertyKey
+        public PropertyKey PropertyKey
         {
             get { return m_propertyKey; }
         }
@@ -834,49 +837,6 @@ namespace WinShell
         */
     } // class PropertyDescription
 
-    [StructLayout (LayoutKind.Sequential, Pack = 4)]
-    public struct PROPERTYKEY
-    {
-        public Guid fmtid;
-        public UInt32 pid;
-
-        public PROPERTYKEY(Guid guid, UInt32 propertyId)
-        {
-            fmtid = guid;
-            pid = propertyId;
-        }
-
-        public PROPERTYKEY(string guid, UInt32 propertyId)
-        {
-            fmtid = new Guid(guid);
-            pid = propertyId;
-        }
-
-        public bool Equals(PROPERTYKEY pk)
-        {
-            return fmtid.Equals(pk.fmtid) && pid == pk.pid;
-        }
-
-        public override bool Equals(object obj)
-        {
-            if (obj is PROPERTYKEY)
-            {
-                return Equals((PROPERTYKEY)obj);
-            }
-            return false;
-        }
-
-        public override int GetHashCode()
-        {
-            return fmtid.GetHashCode() ^ pid.GetHashCode();
-        }
-
-        public override string ToString()
-        {
-            return string.Concat("(", fmtid.ToString(), ",", pid.ToString(), ")");
-        }
-    } // struct PROPERTYKEY
-
     /// <summary>
     /// Declares the values of the <see cref="PropertyDescription.TypeFlags"/> property.
     /// </summary>
@@ -945,11 +905,11 @@ namespace WinShell
         {
             void GetCount([Out] out uint cProps);
 
-            void GetAt([In] uint iProp, out PROPERTYKEY pkey);
+            void GetAt([In] uint iProp, [Out] out PropertyKey pkey);
 
-            void GetValue([In] ref PROPERTYKEY key, [In] IntPtr pv);
+            void GetValue([In] ref PropertyKey key, [In] IntPtr pv);
 
-            void SetValue([In] ref PROPERTYKEY key, [In] IntPtr pv);
+            void SetValue([In] ref PropertyKey key, [In] IntPtr pv);
 
             void Commit();
         }
@@ -966,7 +926,7 @@ namespace WinShell
         public interface IPropertyStoreCapabilities
         {
             [PreserveSig]
-            Int32 IsPropertyWritable([In] ref PROPERTYKEY pkey);
+            Int32 IsPropertyWritable([In] ref PropertyKey pkey);
         }
 
         /*
@@ -1022,7 +982,7 @@ namespace WinShell
         public interface IPropertySystem
         {
             [PreserveSig]
-            Int32 GetPropertyDescription([In] ref PROPERTYKEY propkey, [In] ref Guid riid, [Out] out IPropertyDescription rPropertyDescription);
+            Int32 GetPropertyDescription([In] ref PropertyKey propkey, [In] ref Guid riid, [Out] out IPropertyDescription rPropertyDescription);
 
             [PreserveSig]
             Int32 GetPropertyDescriptionByName([In][MarshalAs(UnmanagedType.LPWStr)] string pszCanonicalName, [In] ref Guid riid, [Out] out IPropertyDescription rPropertyDescription);
@@ -1114,7 +1074,7 @@ namespace WinShell
         public interface IPropertyDescription
         {
             [PreserveSig]
-            Int32 GetPropertyKey([Out] out PROPERTYKEY pkey);
+            Int32 GetPropertyKey([Out] out PropertyKey pkey);
 
             [PreserveSig]
             Int32 GetCanonicalName([Out] out IntPtr ppszName);
@@ -1135,56 +1095,6 @@ namespace WinShell
             Int32 GetViewFlags([Out] out PROPDESC_VIEW_FLAGS ppdtFlags);
 
             // === All Other Methods Deferred Until Later! ===
-        }
-
-        /*
-        // C++ version
-        typedef struct PROPVARIANT {
-            VARTYPE vt;
-            WORD    wReserved1;
-            WORD    wReserved2;
-            WORD    wReserved3;
-            union {
-                // Various types of up to 8 bytes
-            }
-        } PROPVARIANT;
-        */
-        [StructLayout(LayoutKind.Explicit)]
-        internal struct PROPVARIANT
-        {
-            [FieldOffset(0)]
-            public ushort vt;
-            [FieldOffset(2)]
-            public ushort wReserved1;
-            [FieldOffset(4)]
-            public ushort wReserved2;
-            [FieldOffset(6)]
-            public ushort wReserved3;
-            [FieldOffset(8)]
-            public Int32 data01;
-            [FieldOffset(12)]
-            public Int32 data02;
-
-            // IntPtr (for strings and the like)
-            [FieldOffset(8)]
-            public IntPtr dataIntPtr;
-
-            // For FileTime and Int64
-            [FieldOffset(8)]
-            public long dataInt64;
-
-            // Vector-style arrays (for VT_VECTOR|VT_LPWSTR and such)
-            [FieldOffset(8)]
-            public uint cElems;
-            [FieldOffset(12)]
-            public IntPtr pElems32;
-            [FieldOffset(16)]
-            public IntPtr pElems64;
-
-            public IntPtr pElems
-            {
-                get { return (IntPtr.Size == 4) ? pElems32 : pElems64; }
-            }
         }
 
         [Flags]
@@ -1221,317 +1131,8 @@ namespace WinShell
                 [In] ref Guid iIdPropStore,
                 [Out] out IPropertyStore propertyStore);
 
-        [DllImport(@"ole32.dll", SetLastError = true, CallingConvention = CallingConvention.StdCall, PreserveSig = false)]
-        public static extern void PropVariantInit([In] IntPtr pvarg);
-
-        [DllImport(@"ole32.dll", SetLastError = true, CallingConvention = CallingConvention.StdCall, PreserveSig = false)]
-        public static extern void PropVariantClear([In] IntPtr pvarg);
-
         [DllImport("propsys.dll", SetLastError = true, CallingConvention = CallingConvention.StdCall, PreserveSig = false)]
         public static extern void PSGetPropertySystem([In] ref Guid iIdPropertySystem, [Out] out IPropertySystem propertySystem);
-
-        // Converts a string to a PropVariant with type LPWSTR instead of BSTR
-        // The resulting variant must be cleared using PropVariantClear and freed using Marshal.FreeCoTaskMem
-        public static IntPtr PropVariantFromString(string value)
-        {
-            IntPtr pstr = IntPtr.Zero;
-            IntPtr pv = IntPtr.Zero;
-            try
-            {
-                // In managed code, new automatically zeros the contents.
-                PROPVARIANT propvariant = new PROPVARIANT();
-
-                // Allocate the string
-                pstr = Marshal.StringToCoTaskMemUni(value);
-
-                // Allocate the PropVariant
-                pv = Marshal.AllocCoTaskMem(16);
-
-                // Transfer ownership of the string
-                propvariant.vt = 31; // VT_LPWSTR - not documented but this is to be allocated using CoTaskMemAlloc.
-                propvariant.dataIntPtr = pstr;
-                Marshal.StructureToPtr(propvariant, pv, false);
-                pstr = IntPtr.Zero;
-
-                // Transfer ownership to the result
-                IntPtr result = pv;
-                pv = IntPtr.Zero;
-                return result;
-            }
-            finally
-            {
-                if (pstr != IntPtr.Zero)
-                {
-                    Marshal.FreeCoTaskMem(pstr);
-                    pstr = IntPtr.Zero;
-                }
-                if (pv != IntPtr.Zero)
-                {
-                    try
-                    {
-                        PropertyStoreInterop.PropVariantClear(pv);
-                    }
-                    catch
-                    {
-                        Debug.Fail("VariantClear failure");
-                    }
-                    Marshal.FreeCoTaskMem(pv);
-                    pv = IntPtr.Zero;
-                }
-            }
-        }
-
-        // Converts an object to a PropVariant including special handling for strings
-        // The resulting variant must be cleared using PropVariantClear and freed using Marshal.FreeCoTaskMem
-        public static IntPtr PropVariantFromObject(object value)
-        {
-            {
-                string strValue = value as string;
-                if (strValue != null)
-                {
-                    return PropVariantFromString(strValue);
-                }
-            }
-
-            {
-                IntPtr pv = IntPtr.Zero;
-                try
-                {
-                    pv = Marshal.AllocCoTaskMem(16);
-
-                    if (value is DateTime)
-                    {
-                        DateTime dtValue = (DateTime)value;
-                        PROPVARIANT v = new PROPVARIANT();
-                        v.vt = 64; // VT_FILETIME
-                        v.dataInt64 = dtValue.ToFileTimeUtc();
-                        Marshal.StructureToPtr(v, pv, false);
-                    }
-                    else
-                    {
-                        Marshal.GetNativeVariantForObject(value, pv);
-                    }
-
-                    IntPtr result = pv;
-                    pv = IntPtr.Zero;
-                    return result;
-                }
-                finally
-                {
-                    if (pv != IntPtr.Zero)
-                    {
-                        try
-                        {
-                            PropertyStoreInterop.PropVariantClear(pv);
-                        }
-                        catch
-                        {
-                            Debug.Fail("VariantClear failure");
-                        }
-                        Marshal.FreeCoTaskMem(pv);
-                        pv = IntPtr.Zero;
-                    }
-                }
-            }
-        } // Method PropVariantFromObject
-
-        // Reference: https://msdn.microsoft.com/en-us/library/windows/desktop/aa380072(v=vs.85).aspx
-        public static object PropVariantToObject(IntPtr pv)
-        {
-            // Copy to structure
-            PROPVARIANT v = (PROPVARIANT)Marshal.PtrToStructure(pv, typeof(PROPVARIANT));
-
-            object value = null;
-            switch (v.vt)
-            {
-                case 0: // VT_EMPTY
-                case 1: // VT_NULL
-                case 2: // VT_I2
-                case 3: // VT_I4
-                case 4: // VT_R4
-                case 5: // VT_R8
-                case 6: // VT_CY
-                //case 7: // VT_DATE
-                case 8: // VT_BSTR
-                case 10: // VT_ERROR
-                case 11: // VT_BOOL
-                case 14: // VT_DECIMAL
-                case 16: // VT_I1
-                case 17: // VT_UI1
-                case 18: // VT_UI2
-                case 19: // VT_UI4
-                case 20: // VT_I8
-                case 21: // VT_UI8
-                case 22: // VT_INT
-                case 23: // VT_UINT
-                case 24: // VT_VOID
-                case 25: // VT_HRESULT
-                    value = Marshal.GetObjectForNativeVariant(pv);
-                    break;
-
-                case 30: // VT_LPSTR
-                    value = Marshal.PtrToStringAnsi(v.dataIntPtr);
-                    break;
-
-                case 31: // VT_LPWSTR
-                    value = Marshal.PtrToStringUni(v.dataIntPtr);
-                    break;
-
-                case 64: // VT_FILETIME
-                    value = DateTime.FromFileTimeUtc(v.dataInt64);
-                    break;
-
-                case 66: // 0x42 VT_STREAM (Used by: System.ThumbnailStream on .mp3 format file, System.Contact.AccountPictureLarge, System.Contact.AccountPictureSmall)
-                    throw new NotImplementedException("Conversion of PROPVARIANT VT_STREAM to managed type not yet supported.");
-
-                case 71: // 0x47 VT_CF (CLIPDATA format, Used by: System.Thumbnail on .xls format file)
-                    throw new NotImplementedException("Conversion of PROPVARIANT VT_CF to managed type not yet supported.");
-
-                case 72: // VT_CLSID
-                    {
-                        byte[] bytes = new byte[16];
-                        Marshal.Copy(v.dataIntPtr, bytes, 0, 16);
-                        value = new Guid(bytes);
-                    }
-                    break;
-
-                case 0x1002: // VT_VECTOR|VT_I2
-                    {
-                        Int16[] a = new Int16[v.cElems];
-                        Marshal.Copy(v.pElems, a, 0, (int)v.cElems);
-                        value = a;
-                    }
-                    break;
-
-                case 0x1003: // VT_VECTOR|VT_I4
-                case 0x1016: // VT_VECTOR|VT_INT
-                    {
-                        Int32[] a = new Int32[v.cElems];
-                        Marshal.Copy(v.pElems, a, 0, (int)v.cElems);
-                        value = a;
-                    }
-                    break;
-
-                case 0x1004: // VT_VECTOR|VT_R4
-                    {
-                        float[] a = new float[v.cElems];
-                        Marshal.Copy(v.pElems, a, 0, (int)v.cElems);
-                        value = a;
-                    }
-                    break;
-
-                case 0x1010: // VT_VECTOR|VT_I1
-                    {
-                        byte[] a = new byte[v.cElems];
-                        Marshal.Copy(v.pElems, a, 0, (int)v.cElems);
-                        SByte[] b = new SByte[v.cElems];
-                        Buffer.BlockCopy(a, 0, b, 0, (int)v.cElems);
-                        value = b;
-                    }
-                    break;
-
-                case 0x1011: // VT_VECTOR|VT_UI1
-                    {
-                        byte[] a = new byte[v.cElems];
-                        Marshal.Copy(v.pElems, a, 0, (int)v.cElems);
-                        value = a;
-                    }
-                    break;
-
-                case 0x1012: // VT_VECTOR|VT_UI2
-                    {
-                        Int16[] a = new Int16[v.cElems];
-                        Marshal.Copy(v.pElems, (Int16[])a, 0, (int)v.cElems);
-                        UInt16[] b = new UInt16[v.cElems];
-                        Buffer.BlockCopy(a, 0, b, 0, (int)v.cElems * 2);
-                        value = b;
-                    }
-                    break;
-
-                case 0x1013: // VT_VECTOR|VT_UI4
-                case 0x1017: // VT_VECTOR|VT_UINT
-                    {
-                        Int32[] a = new Int32[v.cElems];
-                        Marshal.Copy(v.pElems, a, 0, (int)v.cElems);
-                        UInt32[] b = new UInt32[v.cElems];
-                        Buffer.BlockCopy(a, 0, b, 0, (int)v.cElems * 4);
-                        value = b;
-                    }
-                    break;
-
-                case 0x1014: // VT_VECTOR|VT_I8
-                    {
-                        Int64[] a = new Int64[v.cElems];
-                        Marshal.Copy(v.pElems, a, 0, (int)v.cElems);
-                        value = a;
-                    }
-                    break;
-
-                case 0x1015: // VT_VECTOR|VT_UI8
-                    {
-                        Int64[] a = new Int64[v.cElems];
-                        Marshal.Copy(v.pElems, a, 0, (int)v.cElems);
-                        UInt64[] b = new UInt64[v.cElems];
-                        Buffer.BlockCopy(a, 0, b, 0, (int)v.cElems * 8);
-                        value = b;
-                    }
-                    break;
-
-                case 0x1005: // VT_VECTOR|VT_R8
-                    {
-                        double[] doubles = new double[v.cElems];
-                        Marshal.Copy(v.pElems, doubles, 0, (int)v.cElems);
-                        value = doubles;
-                    }
-                    break;
-
-                case 0x100C: // VT_VECTOR|VT_VARIANT (Used by: Unnamed property on .potx file)
-                    throw new NotImplementedException("Conversion of PROPVARIANT VT_VECTOR|VT_VARIANT to managed type not yet supported.");
-
-                case 0x101E: // VT_VECTOR|VT_LPSTR (Used by unnamed properties on .potx and .dotx files)
-                    {
-                        string[] strings = new string[v.cElems];
-                        for (int i = 0; i < v.cElems; ++i)
-                        {
-                            IntPtr strPtr = Marshal.ReadIntPtr(v.pElems + i * IntPtr.Size);
-                            strings[i] = Marshal.PtrToStringAnsi(strPtr);
-                        }
-                        value = strings;
-                    }
-                    break;
-
-                case 0x101f: // VT_VECTOR|VT_LPWSTR
-                    {
-                        string[] strings = new string[v.cElems];
-                        for (int i = 0; i < v.cElems; ++i)
-                        {
-                            IntPtr strPtr = Marshal.ReadIntPtr(v.pElems + i * IntPtr.Size);
-                            strings[i] = Marshal.PtrToStringUni(strPtr);
-                        }
-                        value = strings;
-                    }
-                    break;
-
-                default:
-#if DEBUG
-                    // Attempt conversion and report if it works
-                    try
-                    {
-                        value = Marshal.GetObjectForNativeVariant(pv);
-                        if (value == null) value = "(null)";
-                        value = String.Format("(Supported type 0x{0:x4}): {1}", v.vt, value.ToString());
-                        throw new NotImplementedException(string.Format("Conversion of PROPVARIANT type 0x{0:x4} is not yet supported but Marshal.GetObjectForNativeVariant seems to work. value='{0}'", v.vt, value));
-                    }
-                    catch
-                    {
-                        // Do nothing
-                    }
-#endif
-                    throw new NotImplementedException(string.Format("Conversion of PROPVARIANT type 0x{0:x4} is not yet supported.", v.vt));
-            }
-
-            return value;
-        } // Method PropVariantToObject
 
     } // class PropertyStoreInterop
 

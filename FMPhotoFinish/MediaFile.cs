@@ -151,6 +151,7 @@ namespace FMPhotoFinish
             foreach(char c in filename)
             {
                 if (char.IsDigit(c)) sb.Append(c);
+                if (sb.Length >= 17) break;
             }
             var digits = sb.ToString();
             if (digits.Length < 14) return false;

@@ -3,9 +3,9 @@
 name: WinShellPropertyStore.cs
 description: C# Wrapper for Windows Property System
 url: https://github.com/FileMeta/WinShellPropertyStore/raw/master/WinShellPropertyStore.cs
-version: 1.7
+version: 1.8
 keywords: CodeBit
-dateModified: 2019-04-10
+dateModified: 2019-05-10
 license: http://unlicense.org
 dependsOn: https://github.com/FileMeta/WinShellPropertyStore/raw/master/PropVariant.cs https://github.com/FileMeta/WinShellPropertyStore/raw/master/PropertyKey.cs
 # Metadata in MicroYaml format. See http://filemeta.org and http://schema.org
@@ -575,7 +575,7 @@ namespace WinShell
             hResult = iPropertyDescription.GetViewFlags(out m_viewFlags);
             if (hResult < 0)
             {
-                m_typeFlags = 0;
+                m_viewFlags = 0;
                 Debug.Fail("IPropertyDescription.GetViewFlags failed.");
             }
 
@@ -636,71 +636,6 @@ namespace WinShell
         }
 
         /// <summary>
-        /// Indicates whether this property value type is supported by the managed wrapper
-        /// </summary>
-        public bool ValueTypeIsSupported
-        {
-            get
-            {
-                switch (m_vt)
-                {
-                    case 0: // VT_EMPTY
-                    case 1: // VT_NULL
-                        return false;
-                    case 2: // VT_I2
-                    case 3: // VT_I4
-                    case 4: // VT_R4
-                    case 5: // VT_R8
-                    case 6: // VT_CY
-                    case 8: // VT_BSTR
-                    case 10: // VT_ERROR
-                    case 11: // VT_BOOL
-                    case 14: // VT_DECIMAL
-                    case 16: // VT_I1
-                    case 17: // VT_UI1
-                    case 18: // VT_UI2
-                    case 19: // VT_UI4
-                    case 20: // VT_I8
-                    case 21: // VT_UI8
-                    case 22: // VT_INT
-                    case 23: // VT_UINT
-                    case 25: // VT_HRESULT
-                    case 30: // VT_LPSTR
-                    case 31: // VT_LPWSTR
-                    case 64: // VT_FILETIME
-                    case 72: // VT_CLSID
-                    case 0x1002: // VT_VECTOR|VT_I2
-                    case 0x1003: // VT_VECTOR|VT_I4
-                    case 0x1004: // VT_VECTOR|VT_R4
-                    case 0x1005: // VT_VECTOR|VT_R8
-                    case 0x1010: // VT_VECTOR|VT_I1
-                    case 0x1011: // VT_VECTOR|VT_UI1
-                    case 0x1012: // VT_VECTOR|VT_UI2
-                    case 0x1013: // VT_VECTOR|VT_UI4
-                    case 0x1014: // VT_VECTOR|VT_I8
-                    case 0x1015: // VT_VECTOR|VT_UI8
-                    case 0x1016: // VT_VECTOR|VT_INT
-                    case 0x1017: // VT_VECTOR|VT_UINT
-                    case 0x101E: // VT_VECTOR|VT_LPSTR
-                    case 0x101F: // VT_VECTOR|VT_LPWSTR
-                        return true;
-
-                    case 66: // 0x42 VT_STREAM (Used by: System.ThumbnailStream on .mp3 format file, System.Contact.AccountPictureLarge, System.Contact.AccountPictureSmall)
-                    case 71: // 0x47 VT_CF (CLIPDATA format, Used by: System.Thumbnail on .xls format file)
-                    case 0x100C: // VT_VECTOR|VT_VARIANT (Used by: Unnamed property on .potx file)
-                        return false;
-
-                    default:
-#if DEBUG
-                        throw new NotImplementedException(string.Format("Unexpected PROPVARIANT type 0x{0:x4}.", m_vt));
-#else
-                        return false;
-#endif
-                }
-            }
-        }
-
-        /// <summary>
         /// The managed type that is used to represent this property value.
         /// </summary>
         /// <remarks>
@@ -710,88 +645,7 @@ namespace WinShell
         {
             get
             {
-                switch (m_vt)
-                {
-                    case 0: // VT_EMPTY
-                    case 1: // VT_NULL
-                        return null;
-                    case 2: // VT_I2
-                        return typeof(Int16);
-                    case 3: // VT_I4
-                    case 22: // VT_INT
-                        return typeof(Int32);
-                    case 4: // VT_R4
-                        return typeof(float);
-                    case 5: // VT_R8
-                        return typeof(double);
-                    case 6: // VT_CY
-                        return typeof(decimal);
-                    case 8: // VT_BSTR
-                    case 30: // VT_LPSTR
-                    case 31: // VT_LPWSTR
-                        return typeof(string);
-                    case 10: // VT_ERROR
-                        return typeof(UInt32);
-                    case 11: // VT_BOOL
-                        return typeof(bool);
-                    case 14: // VT_DECIMAL
-                        return typeof(decimal);
-                    case 16: // VT_I1
-                        return typeof(sbyte);
-                    case 17: // VT_UI1
-                        return typeof(byte);
-                    case 18: // VT_UI2
-                        return typeof(UInt16);
-                    case 19: // VT_UI4
-                    case 23: // VT_UINT
-                    case 25: // VT_HRESULT
-                        return typeof(UInt32);
-                    case 20: // VT_I8
-                        return typeof(Int64);
-                    case 21: // VT_UI8
-                        return typeof(UInt64);
-                    case 64: // VT_FILETIME
-                        return typeof(DateTime);
-                    case 72: // VT_CLSID
-                        return typeof(Guid);
-                    case 0x1002: // VT_VECTOR|VT_I2
-                        return typeof(Int16[]);
-                    case 0x1003: // VT_VECTOR|VT_I4
-                    case 0x1016: // VT_VECTOR|VT_INT
-                        return typeof(Int32[]);
-                    case 0x1004: // VT_VECTOR|VT_R4
-                        return typeof(float[]);
-                    case 0x1005: // VT_VECTOR|VT_R8
-                        return typeof(double[]);
-                    case 0x1010: // VT_VECTOR|VT_I1
-                        return typeof(sbyte[]);
-                    case 0x1011: // VT_VECTOR|VT_UI1
-                        return typeof(byte[]);
-                    case 0x1012: // VT_VECTOR|VT_UI2
-                        return typeof(UInt16[]);
-                    case 0x1013: // VT_VECTOR|VT_UI4
-                    case 0x1017: // VT_VECTOR|VT_UINT
-                        return typeof(UInt32[]);
-                    case 0x1014: // VT_VECTOR|VT_I8
-                        return typeof(Int64[]);
-                    case 0x1015: // VT_VECTOR|VT_UI8
-                        return typeof(UInt64[]);
-                    case 0x101E: // VT_VECTOR|VT_LPSTR
-                    case 0x101F: // VT_VECTOR|VT_LPWSTR
-                        return typeof(String[]);
-
-                    case 66: // 0x42 VT_STREAM (Used by: System.ThumbnailStream on .mp3 format file, System.Contact.AccountPictureLarge, System.Contact.AccountPictureSmall)
-                    case 71: // 0x47 VT_CF (CLIPDATA format, Used by: System.Thumbnail on .xls format file)
-                    case 0x100C: // VT_VECTOR|VT_VARIANT (Used by: Unnamed property on .potx file)
-                        return null;
-
-                    default:
-#if DEBUG
-                        throw new NotImplementedException(string.Format("Unexpected PROPVARIANT type 0x{0:x4}.", m_vt));
-#else
-                        return null;
-#endif
-                }
+                return PropVariant.GetManagedTypeFromVariantType((PropVariant.VT)m_vt);
             }
         } // ValueType
 

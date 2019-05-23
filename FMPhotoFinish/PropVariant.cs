@@ -3,9 +3,9 @@
 name: PropVariant.cs
 description: Managed Code Interoperability for PROPVARIANT - extends existing support for VARIANT
 url: https://github.com/FileMeta/WinShellPropertyStore/raw/master/PropVariant.cs
-version: 1.2
+version: 1.3
 keywords: CodeBit
-dateModified: 2019-04-10
+dateModified: 2019-05-10
 license: http://unlicense.org
 # Metadata in MicroYaml format. See http://filemeta.org and http://schema.org
 ...
@@ -158,47 +158,47 @@ namespace Interop
             switch (vt)
             {
                 case VT.EMPTY:
-                case VT.NULL: // VT_NULL
-                case VT.I2: // VT_I2
-                case VT.I4: // VT_I4
-                case VT.R4: // VT_R4
-                case VT.R8: // VT_R8
-                case VT.CY: // VT_CY
+                case VT.NULL:
+                case VT.I2:
+                case VT.I4:
+                case VT.R4:
+                case VT.R8:
+                case VT.CY:
                 case VT.DATE:
-                case VT.BSTR: // VT_BSTR
-                case VT.ERROR: // VT_ERROR
-                case VT.BOOL: // VT_BOOL
-                case VT.DECIMAL: // VT_DECIMAL
-                case VT.I1: // VT_I1
-                case VT.UI1: // VT_UI1
-                case VT.UI2: // VT_UI2
-                case VT.UI4: // VT_UI4
-                case VT.I8: // VT_I8
-                case VT.UI8: // VT_UI8
-                case VT.INT: // VT_INT
-                case VT.UINT: // VT_UINT
-                case VT.VOID: // VT_VOID
-                case VT.HRESULT: // VT_HRESULT
+                case VT.BSTR:
+                case VT.ERROR:
+                case VT.BOOL:
+                case VT.DECIMAL:
+                case VT.I1:
+                case VT.UI1:
+                case VT.UI2:
+                case VT.UI4:
+                case VT.I8:
+                case VT.UI8:
+                case VT.INT:
+                case VT.UINT:
+                case VT.VOID:
+                case VT.HRESULT:
                     value = Marshal.GetObjectForNativeVariant(pv);
                     break;
 
-                case VT.LPSTR: // VT_LPSTR
+                case VT.LPSTR:
                     value = Marshal.PtrToStringAnsi(Marshal.ReadIntPtr(pv, offsetofPROPVARIANT_data));
                     break;
 
-                case VT.LPWSTR: // VT_LPWSTR
+                case VT.LPWSTR:
                     value = Marshal.PtrToStringUni(Marshal.ReadIntPtr(pv, offsetofPROPVARIANT_data));
                     break;
 
-                case VT.FILETIME: // VT_FILETIME
+                case VT.FILETIME:
                     value = DateTime.FromFileTimeUtc(Marshal.ReadInt64(pv, offsetofPROPVARIANT_data));
                     break;
 
-                case VT.CLSID: // VT_CLSID
+                case VT.CLSID:
                     value = Marshal.PtrToStructure<Guid>(Marshal.ReadIntPtr(pv, offsetofPROPVARIANT_data));
                     break;
 
-                case VT.VECTOR|VT.I2: // VT_VECTOR|VT_I2
+                case VT.VECTOR|VT.I2:
                     {
                         int cElems = (int)Marshal.ReadIntPtr(pv, offsetofPROPVARIANT_cElems);
                         Int16[] a = new Int16[cElems];
@@ -207,8 +207,8 @@ namespace Interop
                     }
                     break;
 
-                case VT.VECTOR|VT.I4: // VT_VECTOR|VT_I4
-                case VT.VECTOR|VT.INT: // VT_VECTOR|VT_INT
+                case VT.VECTOR|VT.I4:
+                case VT.VECTOR|VT.INT:
                     {
                         int cElems = (int)Marshal.ReadIntPtr(pv, offsetofPROPVARIANT_cElems);
                         Int32[] a = new Int32[cElems];
@@ -217,7 +217,7 @@ namespace Interop
                     }
                     break;
 
-                case VT.VECTOR|VT.R4: // VT_VECTOR|VT_R4
+                case VT.VECTOR|VT.R4:
                     {
                         int cElems = (int)Marshal.ReadIntPtr(pv, offsetofPROPVARIANT_cElems);
                         float[] a = new float[cElems];
@@ -226,7 +226,7 @@ namespace Interop
                     }
                     break;
 
-                case VT.VECTOR|VT.I1: // VT_VECTOR|VT_I1
+                case VT.VECTOR|VT.I1:
                     {
                         int cElems = (int)Marshal.ReadIntPtr(pv, offsetofPROPVARIANT_cElems);
                         byte[] a = new byte[cElems];
@@ -237,7 +237,7 @@ namespace Interop
                     }
                     break;
 
-                case VT.VECTOR|VT.UI1: // VT_VECTOR|VT_UI1
+                case VT.VECTOR|VT.UI1:
                     {
                         int cElems = (int)Marshal.ReadIntPtr(pv, offsetofPROPVARIANT_cElems);
                         byte[] a = new byte[cElems];
@@ -245,7 +245,7 @@ namespace Interop
                     }
                     break;
 
-                case VT.VECTOR|VT.UI2: // VT_VECTOR|VT_UI2
+                case VT.VECTOR|VT.UI2:
                     {
                         int cElems = (int)Marshal.ReadIntPtr(pv, offsetofPROPVARIANT_cElems);
                         Int16[] a = new Int16[cElems];
@@ -256,8 +256,8 @@ namespace Interop
                     }
                     break;
 
-                case VT.VECTOR|VT.UI4: // VT_VECTOR|VT_UI4
-                case VT.VECTOR|VT.UINT: // VT_VECTOR|VT_UINT
+                case VT.VECTOR|VT.UI4:
+                case VT.VECTOR|VT.UINT:
                     {
                         int cElems = (int)Marshal.ReadIntPtr(pv, offsetofPROPVARIANT_cElems);
                         Int32[] a = new Int32[cElems];
@@ -268,7 +268,7 @@ namespace Interop
                     }
                     break;
 
-                case VT.VECTOR|VT.I8: // VT_VECTOR|VT_I8
+                case VT.VECTOR|VT.I8:
                     {
                         int cElems = (int)Marshal.ReadIntPtr(pv, offsetofPROPVARIANT_cElems);
                         Int64[] a = new Int64[cElems];
@@ -277,7 +277,7 @@ namespace Interop
                     }
                     break;
 
-                case VT.VECTOR|VT.UI8: // VT_VECTOR|VT_UI8
+                case VT.VECTOR|VT.UI8:
                     {
                         int cElems = (int)Marshal.ReadIntPtr(pv, offsetofPROPVARIANT_cElems);
                         Int64[] a = new Int64[cElems];
@@ -288,7 +288,7 @@ namespace Interop
                     }
                     break;
 
-                case VT.VECTOR|VT.R8: // VT_VECTOR|VT_R8
+                case VT.VECTOR|VT.R8:
                     {
                         int cElems = (int)Marshal.ReadIntPtr(pv, offsetofPROPVARIANT_cElems);
                         double[] a = new double[cElems];
@@ -297,7 +297,7 @@ namespace Interop
                     }
                     break;
 
-                case VT.VECTOR|VT.LPSTR: // VT_VECTOR|VT_LPSTR (Used by unnamed properties on .potx and .dotx files)
+                case VT.VECTOR|VT.LPSTR:
                     {
                         int cElems = (int)Marshal.ReadIntPtr(pv, offsetofPROPVARIANT_cElems);
                         IntPtr pElems = Marshal.ReadIntPtr(pv, offsetofPROPVARIANT_pElems);
@@ -310,7 +310,7 @@ namespace Interop
                     }
                     break;
 
-                case VT.VECTOR|VT.LPWSTR: // VT_VECTOR|VT_LPWSTR
+                case VT.VECTOR|VT.LPWSTR:
                     {
                         int cElems = (int)Marshal.ReadIntPtr(pv, offsetofPROPVARIANT_cElems);
                         IntPtr pElems = Marshal.ReadIntPtr(pv, offsetofPROPVARIANT_pElems);
@@ -345,6 +345,111 @@ namespace Interop
 
             return value;
         } // Method PropVariantToObject
+
+        /// <summary>
+        /// Returns the managed type that will result from conversion of a variant type
+        /// </summary>
+        /// <param name="vt">The variant type to be converted. (May be coerced from
+        /// int or uint.)</param>
+        /// <returns>The managed type that would result from conversion of the variant
+        /// type.</returns>
+        /// <remarks>
+        /// <para>VT_EMPTY and VT_NULL return typeof(object). Conversion of either of
+        /// these types would result in null.
+        /// </para>
+        /// <para>Unsupported VT values result in a null return.
+        /// </para>
+        /// </remarks>
+        public static Type GetManagedTypeFromVariantType(VT vt)
+        {
+            switch (vt)
+            {
+                case VT.EMPTY: // 0
+                case VT.NULL:  // 1
+                    return typeof(object);
+                case VT.I2: // 2
+                    return typeof(Int16);
+                case VT.I4: // 3
+                case VT.INT: // 22
+                    return typeof(Int32);
+                case VT.R4: // 4
+                    return typeof(float);
+                case VT.R8: // 5
+                    return typeof(double);
+                case VT.CY: // 6
+                    return typeof(decimal);
+                case VT.DATE: // 7
+                    return typeof(DateTime);
+                case VT.BSTR: // 8
+                case VT.LPSTR: // 30
+                case VT.LPWSTR: // 31
+                    return typeof(string);
+                case VT.ERROR: // 10
+                    return typeof(UInt32);
+                case VT.BOOL: // 11
+                    return typeof(bool);
+                case VT.DECIMAL: // 14
+                    return typeof(decimal);
+                case VT.I1: // 16
+                    return typeof(sbyte);
+                case VT.UI1: // 17
+                    return typeof(byte);
+                case VT.UI2: // 18
+                    return typeof(UInt16);
+                case VT.UI4: // 19
+                case VT.UINT: // 23
+                case VT.HRESULT: // 25
+                    return typeof(UInt32);
+                case VT.I8: // 20
+                    return typeof(Int64);
+                case VT.UI8: // 21
+                    return typeof(UInt64);
+                case VT.FILETIME: // 64
+                    return typeof(DateTime);
+                case VT.CLSID: // 72
+                    return typeof(Guid);
+                case VT.VECTOR | VT.I2:
+                    return typeof(Int16[]);
+                case VT.VECTOR | VT.I4:
+                case VT.VECTOR | VT.INT:
+                    return typeof(Int32[]);
+                case VT.VECTOR | VT.R4:
+                    return typeof(float[]);
+                case VT.VECTOR | VT.R8:
+                    return typeof(double[]);
+                case VT.VECTOR | VT.I1:
+                    return typeof(sbyte[]);
+                case VT.VECTOR | VT.UI1:
+                    return typeof(byte[]);
+                case VT.VECTOR | VT.UI2:
+                    return typeof(UInt16[]);
+                case VT.VECTOR | VT.UI4:
+                case VT.VECTOR | VT.UINT:
+                    return typeof(UInt32[]);
+                case VT.VECTOR | VT.I8:
+                    return typeof(Int64[]);
+                case VT.VECTOR | VT.UI8:
+                    return typeof(UInt64[]);
+                case VT.VECTOR | VT.LPSTR:
+                case VT.VECTOR | VT.LPWSTR:
+                    return typeof(String[]);
+
+                // Explicitly unsupported types
+                case VT.DISPATCH:
+                case VT.UNKNOWN:
+                case VT.STREAM: // 0x42 VT_STREAM (Used by: System.ThumbnailStream on .mp3 format file, System.Contact.AccountPictureLarge, System.Contact.AccountPictureSmall)
+                case VT.CF: // 0x47 VT_CF (CLIPDATA format, Used by: System.Thumbnail on .xls format file)
+                case VT.VECTOR | VT.VARIANT: // VT_VECTOR|VT_VARIANT (Used by: Unnamed property on .potx file)
+                    return null;
+
+                default:
+#if DEBUG
+                        throw new NotImplementedException(string.Format("Unexpected PROPVARIANT type 0x{0:x4}.", (uint)vt));
+#else
+                    return null;
+#endif
+            }
+        }
 
         // Reference: https://msdn.microsoft.com/en-us/library/windows/desktop/aa380072(v=vs.85).aspx
 

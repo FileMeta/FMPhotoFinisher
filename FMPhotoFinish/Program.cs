@@ -140,8 +140,14 @@ Operations:
                    which is .mp4 for video and .m4a for audio. Also renames
                    .jpeg files to .jpg.
 
-  -allTheWay        Performs all of the basic operations. Equivalent to:
-                   -orderedNames -autorot -transcode -saveOriginalFn -setUUID
+  -determineDate   Determines the date and timezone from available data and
+                   sets the corresponding metadata fields. This operation is
+                   automatically performed regardless of the command-line
+                   flag if any other metadata fields are updated.
+
+  -allTheWay       Performs all of the basic operations. Equivalent to:
+                   -orderedNames -autorot -transcode -saveOriginalFn
+                   -setUUID -determineDate
 
   -setDate <dateTime>  Set the dateCreated/dateTaken value in the metadata
                    to the specified date and time. (See details on format
@@ -497,6 +503,10 @@ Timezones:
                             photoFinisher.AddKeywords.Add(args[i]);
                             break;
 
+                        case "-determinedate":
+                            photoFinisher.AlwaysSetDate = true;
+                            break;
+
                         case "-alltheway":
                             photoFinisher.AutoRotate = true;
                             if (!photoFinisher.SetMetadataNames)
@@ -504,6 +514,7 @@ Timezones:
                             photoFinisher.SaveOriginalFilaname = true;
                             photoFinisher.SetUuid = true;
                             photoFinisher.Transcode = true;
+                            photoFinisher.AlwaysSetDate = true;
                             break;
 
                         case "-setdate":

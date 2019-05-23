@@ -583,7 +583,7 @@ namespace FMPhotoFinish
         /// from .MOV and .MP4 files.
         /// </summary>
         /// <returns>True if the date was successfully determined. Otherwise false.</returns>
-        public bool DeterimineCreationDate()
+        public bool DeterimineCreationDate(bool alwaysStore)
         {
             // First, determine the precision if not already set
             if (m_datePrecision == 0 && m_mtDatePrecision != 0)
@@ -613,14 +613,14 @@ namespace FMPhotoFinish
             {
                 m_creationDate = m_isomCreationTime;
                 CreationDateSource = "Isom.CreationTime";
-                m_updateMetadata = true;
+                if (alwaysStore) m_updateMetadata = true;
                 return true;
             }
             if (m_etDateTimeOriginal.HasValue)
             {
                 m_creationDate = m_etDateTimeOriginal;
                 CreationDateSource = "Exif.DateTimeOriginal";
-                m_updateMetadata = true;
+                if (alwaysStore) m_updateMetadata = true;
                 return true;
             }
             // From file naming convention
@@ -630,7 +630,7 @@ namespace FMPhotoFinish
                 {
                     m_creationDate = dt;
                     CreationDateSource = "Filename";
-                    m_updateMetadata = true;
+                    if (alwaysStore) m_updateMetadata = true;
                     return true;
                 }
             }
@@ -641,6 +641,9 @@ namespace FMPhotoFinish
         /// Attempt to determine the timezone of media files - especially those
         /// with UTC metadata. (See remarks for detail.) 
         /// </summary>
+        /// <param name="alwaysStore">True to always store the value in custom metadata.
+        /// False to only store if other metadata is updated (such as date, uuid, original
+        /// filename, etc.</param>
         /// <remarks>
         /// <para>Video and audio files in ISOM-derived formats (.mov, .mp4, .m4a, etc.) and
         /// video in .avi format store the date/time of the event in UTC. Meanwhile, photos
@@ -655,10 +658,10 @@ namespace FMPhotoFinish
         /// important case.
         /// </para>
         /// <para>For cameras without a timezone setting, a local time is often stored in
-        /// a UTC field. In that case, the timezone is set to "+00:00".
+        /// a UTC field. In that case, the timezone is set to "0".
         /// </para>
         /// </remarks>
-        public bool DetermineTimezone()
+        public bool DetermineTimezone(bool alwaysStore)
         {
             // DateTime is not known so timezone is irrelevant
             if (!m_creationDate.HasValue) return false;
@@ -678,7 +681,7 @@ namespace FMPhotoFinish
             {
                 m_timezone = m_etTimezone;
                 TimezoneSource = "MakerNote";
-                m_updateMetadata = true;
+                if (alwaysStore) m_updateMetadata = true;
                 return true;
             }
 
@@ -694,7 +697,7 @@ namespace FMPhotoFinish
             {
                 m_timezone = new TimeZoneTag(tzMinutes, tzMinutes == 0 ? TimeZoneKind.ForceLocal : TimeZoneKind.Normal);
                 TimezoneSource = "IsomVsExif";
-                m_updateMetadata = true;
+                if (alwaysStore) m_updateMetadata = true;
                 return true;
             }
 
@@ -708,7 +711,7 @@ namespace FMPhotoFinish
             {
                 m_timezone = new TimeZoneTag(tzMinutes, tzMinutes == 0 ? TimeZoneKind.ForceLocal : TimeZoneKind.Normal);
                 TimezoneSource = "Filename";
-                m_updateMetadata = true;
+                if (alwaysStore) m_updateMetadata = true;
                 return true;
             }
 
@@ -725,7 +728,7 @@ namespace FMPhotoFinish
                 {
                     m_timezone = TimeZoneTag.ForceLocal;
                     TimezoneSource = "FileSystem";
-                    m_updateMetadata = true;
+                    if (alwaysStore) m_updateMetadata = true;
                     return true;
                 }
 
@@ -735,7 +738,7 @@ namespace FMPhotoFinish
                 {
                     m_timezone = TimeZoneTag.ForceLocal;
                     TimezoneSource = "FileSystem";
-                    m_updateMetadata = true;
+                    if (alwaysStore) m_updateMetadata = true;
                     return true;
                 }
             }
@@ -746,7 +749,7 @@ namespace FMPhotoFinish
             {
                 m_timezone = TimeZoneTag.ForceLocal;
                 TimezoneSource = "LocalDate";
-                m_updateMetadata = true;
+                if (alwaysStore) m_updateMetadata = true;
                 return true;
             }
 

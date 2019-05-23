@@ -86,6 +86,15 @@ namespace FMPhotoFinish
         public TimeSpan? ShiftDateBy { get; set; }
 
         /// <summary>
+        /// Determine the timezone and set the custom metadata field accordingly
+        /// </summary>
+        /// <remarks>
+        /// If other metadata are written then the timezone will also be written. This
+        /// forces the field to be written even if nothing else changes.
+        /// </remarks>
+        public bool AlwaysSetDate { get; set; }
+
+        /// <summary>
         /// Sets the timezone to the specified value while keeping the local time the same.
         /// </summary>
         /// <remarks>
@@ -353,13 +362,13 @@ namespace FMPhotoFinish
                         }
                     }
 
-                    bool hasCreationDate = mdf.DeterimineCreationDate();
+                    bool hasCreationDate = mdf.DeterimineCreationDate(AlwaysSetDate);
                     if (hasCreationDate)
                     {
                         OnProgressReport($"   Date: {mdf.CreationDate} ({mdf.CreationDate.Date.Kind}) from {mdf.CreationDateSource}.");
                     }
 
-                    bool hasTimezone = mdf.DetermineTimezone();
+                    bool hasTimezone = mdf.DetermineTimezone(AlwaysSetDate);
                     if (hasTimezone)
                     {
                         OnProgressReport($"   Timezone: {Format(mdf.Timezone)} from {mdf.TimezoneSource}.");

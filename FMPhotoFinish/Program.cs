@@ -171,6 +171,9 @@ Operations:
                    sync systems key off the DateModified value and this may
                    interfere with that operation.
 
+  -tag <tag>       Add a keyword tag to each file. This parameter may be
+                   repeated to add multiple tags.
+
 Other Options:
 
   -h               Print this help text and exit (ignoring all other
@@ -481,6 +484,17 @@ Timezones:
 
                         case "-transcode":
                             photoFinisher.Transcode = true;
+                            break;
+
+                        case "-tag":
+                            ++i;
+                            if (i >= args.Length)
+                            {
+                                Console.WriteLine($"Expected value for -tag command-line argument.");
+                                s_commandLineError = true;
+                                break;
+                            }
+                            photoFinisher.AddKeywords.Add(args[i]);
                             break;
 
                         case "-alltheway":

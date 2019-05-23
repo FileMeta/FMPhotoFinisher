@@ -12,6 +12,11 @@ namespace FMPhotoFinish
         const string c_dcimDirectory = "DCIM";
         const string c_dcimTestDirectory = "DCIM_Test";
 
+        public PhotoFinisher()
+        {
+            AddKeywords = new List<string>();
+        }
+
         // Selected Files
         List<ProcessFileInfo> m_selectedFiles = new List<ProcessFileInfo>();
         HashSet<string> m_selectedFilesHash = new HashSet<string>();
@@ -127,6 +132,11 @@ namespace FMPhotoFinish
         /// Set a UUID in a custom metatag (if one doesn't already exist)
         /// </summary>
         public bool SetUuid { get; set; }
+
+        /// <summary>
+        /// Add keyword tags to the file
+        /// </summary>
+        public IList<string> AddKeywords { get; private set; }
 
         #endregion Operations
 
@@ -429,6 +439,14 @@ namespace FMPhotoFinish
                         else
                         {
                             OnProgressReport($"   ERROR: Failed to change timezone.");
+                        }
+                    }
+
+                    if (AddKeywords.Count > 0)
+                    {
+                        if (mdf.AddKeywords(AddKeywords))
+                        {
+                            OnProgressReport($"   Tag(s) Added.");
                         }
                     }
 

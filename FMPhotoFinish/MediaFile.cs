@@ -237,6 +237,7 @@ namespace FMPhotoFinish
         TimeSpan? m_psDuration;
         string m_psSubject;
         string m_psTitle;
+        string[] m_psKeywords;
 
         // Metatag values from Property System Keywords
         TimeZoneTag m_mtTimezone;
@@ -292,6 +293,7 @@ namespace FMPhotoFinish
                 m_model = propstore.GetValue(PropertyKeys.Model) as string;
                 m_psSubject = propstore.GetValue(PropertyKeys.Subject) as string;
                 m_psTitle = propstore.GetValue(PropertyKeys.Title) as string;
+                m_psKeywords = propstore.GetValue(PropertyKeys.Keywords) as string[];
 
                 if (m_psSubject != null)
                     m_psSubject = m_psSubject.Trim();
@@ -299,11 +301,14 @@ namespace FMPhotoFinish
                 if (m_psTitle != null)
                     m_psTitle = m_psTitle.Trim();
 
+                if (m_psKeywords == null)
+                    m_psKeywords = new string[0];
+
                 // Windows property system will fill in the subject with the title if subject is not present. Compensate for that.
                 if (string.Equals(m_psSubject, m_psTitle, StringComparison.Ordinal))
                     m_psSubject = null; 
 
-                // Keywords may be used to store custom metadata
+                // Comment may be used to store custom metadata
                 var metaTagSet = new MetaTagSet();
                 metaTagSet.Load((string)propstore.GetValue(PropertyKeys.Comment));
                 {
@@ -915,6 +920,46 @@ namespace FMPhotoFinish
         }
 
         /// <summary>
+        /// Add one or more keyword tags
+        /// </summary>
+        /// <param name="keyword">The keyword to add</param>
+        /// <returns>True if added a the tag. False if the file already has this keyword set.</returns>
+        public bool AddKeywords(IEnumerable<string> keywords)
+        {
+            // Make sure the new list is has unique values (using case-insensitive comparisons)
+
+            if (keywords == null) throw new ArgumentException("Keyword does not have a value.");
+            bool valueAdded = false;
+            var keywordList = new List<string>(m_psKeywords.Length);
+            var keywordHash = new HashSet<string>();
+
+            foreach (string keyword in m_psKeywords)
+            {
+                var key = keyword.Trim();
+                if (keywordHash.Add(key.ToLowerInvariant()))
+                {
+                    keywordList.Add(key);
+                }
+            }
+
+            foreach(string keyword in keywords)
+            {
+                var key = keyword.Trim();
+                if (keywordHash.Add(key.ToLowerInvariant()))
+                {
+                    keywordList.Add(key);
+                    valueAdded = true;
+                }
+            }
+
+            if (!valueAdded) return false;
+
+            m_psKeywords = keywordList.ToArray();
+            m_updateMetadata = true;
+            return true;
+        }
+
+        /// <summary>
         /// Save any metadata fields that have changed.
         /// </summary>
         /// <returns>True if metadata updated. False if no metadata changes to save.</returns>
@@ -989,6 +1034,8 @@ namespace FMPhotoFinish
                         ps.SetValue(PropertyKeys.Make, m_make);
                     if (!string.IsNullOrEmpty(m_model))
                         ps.SetValue(PropertyKeys.Model, m_model);
+                    if (m_psKeywords != null && m_psKeywords.Length > 0)
+                        ps.SetValue(PropertyKeys.Keywords, m_psKeywords);
 
                     if (metaTagSet.Count > 0)
                     {

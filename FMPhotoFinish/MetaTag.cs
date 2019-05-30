@@ -3,9 +3,9 @@
 name: MetaTag.cs
 description: CodeBit class for extracting and embedding metatags in text fields.
 url: https://raw.githubusercontent.com/FileMeta/MetaTag/master/MetaTag.cs
-version: 1.0
+version: 2.0
 keywords: CodeBit
-dateModified: 2019-01-23
+dateModified: 2019-05-29
 license: https://opensource.org/licenses/BSD-3-Clause
 # Metadata in MicroYaml format. See http://filemeta.org/CodeBit.html
 ...
@@ -63,52 +63,53 @@ namespace FileMeta
     /// </para>
     /// <para>Examples:</para>
     /// <para>   &author=Brandt</para>
-    /// <para>   &subject=MetaTag_Format</para>
+    /// <para>   &subject="MetaTag Format"</para>
     /// <para>   &date=2018-12-17T21:22:05-06:00</para>
+    /// <para>   &ref=https://en.wikipedia.org/wiki/Metadata</para>
     /// <para></para>
     /// <para>Format Definition:</para>
     /// <para>A metatag starts with an ampersand - just as a hashtag starts with the hash symbol.
     /// </para>
     /// <para>Next comes the name which follows the same standard as a hashtag - it must be composed
     /// of letters, numbers, and the underscore character. Rigorous implementations should use the
-    /// unicode character sets. Specifically Unicode categories: Ll, Lu, Lt, Lo, Lm, Mn, Nd, Pc. For
+    /// corresponding unicode character sets. Specifically, Unicode categories: Ll, Lu, Lt, Lo, Lm, Mn, Nd, Pc. For
     /// regular expressions this matches the \w chacter class.
     /// </para>
     /// <para>Next is an equals sign.
     /// </para>
-    /// <para>Next is the value which is a series of any characters except the ASCII control range (0x00
-    /// to 0x7F), space or the ampersand. Control characters, space, ampersand, underscore, and the percent
-    /// character MUST be encoded. A space character is encoded as the underscore. All other control,
-    /// ampersand, underscore, or percent characters are encoded as the percent character followed by two
-    /// hexadecimal digits. All characters requiring encoding are in the first 256 characters of Unicode, so
-    /// two hexadecimal digits are sufficient. Other Unicode characters are given by their literal value.
+    /// <para>Next is the value which may be in plain or quoted form. In plain form, the value is a series
+    /// of one or more non-whitespace and non-quote characters. The value is terminated by whitespace or
+    /// the end of the document.
     /// </para>
-    /// <para>The value encoding is deliberately similar to URL query string encoding. However, in
-    /// Metatag encoding, the underscore substitutes for a space whereas in URL query strings, the plus
-    /// sign substitutes for a space.
-    /// </para>
-    /// <para>The name IS NOT encoded. Valid names are simply limited to the specified character set.
+    /// <para>Quoted form is a quotation mark followed by zero or more non-quote characters and terminated
+    /// with another quotation mark. Newlines and other whitespace are permitted within the quoted text.
+    /// A pair of quotation marks in the text is interpreted as a singe quotation mark in the value.
     /// </para>
     /// </remarks>
     /// <seealso cref="MetaTagSet"/>
     static class MetaTag
     {
         /* Matches a metatag which is defined as follows:
-           &       An Ampersand
-           \w+     One or more "word characters" consisting of the unicode groups for
-                   letters numbers, nonspacing marks, numers (decimal digits), punctuation characters (underscore)
-           =       The equals sign
-           [^\s&]. Zero or more non-whitespace and non-ampersand characters.
+           &            An Ampersand
+           \w+          One or more "word characters" consisting of the unicode groups for
+                        letters, nonspacing marks, numbers (decimal digits), punctuation 
+                        characters (underscore)
+           =            The equals sign
+           [^\s"].\+    Plain form: One or more non-whitespace and non-quote characters.
+           (?:"[^"]*")+ Quoted form: Text surrounded by quote marks - possibly with
+                        embedded double-quotes
         */
+
+        const string metatagRegex = @"&(\w+)=([^\s""]+|(?:""[^""]*"")+)";
 
         // Matches a metatag that composes the whole string
         static Regex s_rxSingleMetatag = new Regex(
-            @"^&(\w+)=([^\s&]*)$",
+            string.Concat("^", metatagRegex, "$"),
             RegexOptions.CultureInvariant);
 
         // Matches metatags that are embedded in a potentially longer string.
         static Regex s_rxEmbeddedMetatag = new Regex(
-            @"&(\w+)=([^\s&]*)",
+            metatagRegex,
             RegexOptions.CultureInvariant);
 
         /// <summary>
@@ -168,7 +169,7 @@ namespace FileMeta
             KeyValuePair<string, string> result;
             if (!TryParse(s, out result))
             {
-                throw new ArgumentException("Parse failure: Invalid MetaTag String");
+                 throw new ArgumentException("Parse failure: Invalid MetaTag String");
             }
             return result;
         }
@@ -194,38 +195,31 @@ namespace FileMeta
             return $"&{pair.Key}={EncodeValue(pair.Value)}";
         }
 
+        static readonly char[] c_quoteRequiringChars = new char[]
+            {
+                '\r', '\n', '\t', ' ', '"'
+            };
+
         /// <summary>
         /// Encode a metatag value
         /// </summary>
         /// <param name="s">The value to encode.</param>
         /// <returns>The encoded value.</returns>
         /// <remarks>
-        /// <para>The encoded value portion of a metatag may not contain characters lower or equal to 0x1f, the space
-        /// character, percent, or the ampersand. Space characters are encoded as an underscore. The ampersand, percent,
-        /// underscore, and control characters are percent encoded as in URL query strings.
+        /// <para>If the text contains ASCII whitespace or a quote then it must be quoted.
+        /// Otherwise the value is unchanged.
         /// </para>
         /// </remarks>
         public static string EncodeValue(string s)
         {
-            var sb = new StringBuilder();
-            foreach (char c in s)
+            if (s.IndexOfAny(c_quoteRequiringChars) >= 0)
             {
-                if (c == ' ')
-                {
-                    sb.Append('_');
-                }
-                else if (c < '\x20' || c == '%' || c == '&' || c == '_')
-                {
-                    int n = (int)c;
-                    if (n > 255) n = 32; // In the unexpected case of whitespace outside the ASCII range.
-                    sb.Append($"%{n:x2}");
-                }
-                else
-                {
-                    sb.Append(c);
-                }
+                return string.Concat("\"", s.Replace("\"", "\"\""), "\"");
             }
-            return sb.ToString();
+            else
+            {
+                return s;
+            }
         }
 
         /// <summary>
@@ -239,34 +233,14 @@ namespace FileMeta
         /// </remarks>
         public static string DecodeValue(string s)
         {
-            var sb = new StringBuilder();
-            for (int i = 0; i < s.Length; ++i)
+            if (s.Length > 0 && s[0] == '"')
             {
-                char c = s[i];
-                if (c == '_')
-                {
-                    sb.Append(' ');
-                }
-                else if (c == '%' && i < s.Length + 2)
-                {
-                    int n;
-                    if (int.TryParse(s.Substring(i + 1, 2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture,
-                        out n) && n >= 0 && n < 256)
-                    {
-                        sb.Append((char)n);
-                        i += 2;
-                    }
-                    else
-                    {
-                        sb.Append('%');
-                    }
-                }
-                else
-                {
-                    sb.Append(c);
-                }
+                return s.Substring(1, s.Length - 2).Replace("\"\"", "\"");
             }
-            return sb.ToString();
+            else
+            {
+                return s;
+            }
         }
 
         /// <summary>
@@ -324,7 +298,7 @@ namespace FileMeta
 
             var sb = new StringBuilder();
             // Process existing string, suppressing any existing metatags
-            // that don't have values in the set and updating andy that do have values.
+            // that don't have values in the set and updating any that do have values.
             int p = 0;
             foreach (Match match in s_rxEmbeddedMetatag.Matches(s))
             {

@@ -3,9 +3,9 @@
 name: WinShellPropertyStore.cs
 description: C# Wrapper for Windows Property System
 url: https://github.com/FileMeta/WinShellPropertyStore/raw/master/WinShellPropertyStore.cs
-version: 1.8
+version: 1.9
 keywords: CodeBit
-dateModified: 2019-05-10
+dateModified: 2019-05-28
 license: http://unlicense.org
 dependsOn: https://github.com/FileMeta/WinShellPropertyStore/raw/master/PropVariant.cs https://github.com/FileMeta/WinShellPropertyStore/raw/master/PropertyKey.cs
 # Metadata in MicroYaml format. See http://filemeta.org and http://schema.org
@@ -467,6 +467,7 @@ namespace WinShell
         string m_displayName;
         PROPDESC_TYPE_FLAGS m_typeFlags;
         PROPDESC_VIEW_FLAGS m_viewFlags;
+        PROPDESC_DISPLAYTYPE m_displayType;
         ushort m_vt; // Variant type from which the managed type is derived.
 
 #if !RAW_PROPERTY_STORE
@@ -579,6 +580,13 @@ namespace WinShell
                 Debug.Fail("IPropertyDescription.GetViewFlags failed.");
             }
 
+            // Get Display type
+            hResult = iPropertyDescription.GetDisplayType(out m_displayType);
+            if (hResult < 0)
+            {
+                m_displayType = 0;
+                Debug.Fail("IPropertyDescription.GetDisplayType failed.");
+            }
         }
 
         /// <summary>
@@ -648,6 +656,11 @@ namespace WinShell
                 return PropVariant.GetManagedTypeFromVariantType((PropVariant.VT)m_vt);
             }
         } // ValueType
+
+        /// <summary>
+        /// The <see cref="PropertyStoreInterop.PROPDESC_DISPLAYTYPE"/> for the property.
+        /// </summary>
+        public PROPDESC_DISPLAYTYPE DisplayType => m_displayType;
 
         public bool Equals(PropertyDescription pd)
         {
@@ -739,6 +752,21 @@ namespace WinShell
         PDVF_HIDDEN = 0x00000800,
         PDVF_CANWRAP = 0x00001000,
         PDVF_MASK_ALL = 0x00001BFF
+    }
+
+    /// <summary>
+    /// Declares the values of the <see cref="PropertyDescription.DisplayType"/> property.
+    /// </summary>
+    /// <remarks>
+    /// See <seealso cref="https://docs.microsoft.com/en-us/windows/desktop/api/propsys/nf-propsys-ipropertydescription-getdisplaytype"/> for definitions.
+    /// </remarks>
+    public enum PROPDESC_DISPLAYTYPE : int
+    {
+        PDDT_STRING = 0,
+        PDDT_NUMBER = 1,
+        PDDT_BOOLEAN = 2,
+        PDDT_DATETIME = 3,
+        PDDT_ENUMERATED = 4,    // Use GetEnumTypeList
     }
 
     internal static class PropertyStoreInterop
@@ -948,8 +976,52 @@ namespace WinShell
             [PreserveSig]
             Int32 GetViewFlags([Out] out PROPDESC_VIEW_FLAGS ppdtFlags);
 
+            [PreserveSig]
+            Int32 GetDefaultColumnWidth([Out] out int pcxChars);
+
+            [PreserveSig]
+            Int32 GetDisplayType([Out] out PROPDESC_DISPLAYTYPE pdisplaytype);
+
+            [PreserveSig]
+            Int32 GetColumnState([Out] out Int32 pcsFlags);
+
+            [PreserveSig]
+            Int32 GetGroupingRange([Out] out Int32 pgr);
+
+            [PreserveSig]
+            Int32 GetRelativeDescriptionType([Out] out Int32 prdt);
+
+            [PreserveSig]
+            Int32 GetRelativeDescription([In] IntPtr propvar1, [In] IntPtr propvar2, [Out] out IntPtr ppszDesc1, [Out] out IntPtr ppszDesc2);
+
+            [PreserveSig]
+            Int32 GetSortDescription([Out] out Int32 psd);
+
+            [PreserveSig]
+            Int32 GetSortDescriptionLabel(int fDescending, [Out] out IntPtr ppszLabel);
+
+            [PreserveSig]
+            Int32 GetAggregationType([Out] out Int32 paggtype);
+
+            [PreserveSig]
+            Int32 GetConditionType([Out] out Int32 pcontype, [Out] out Int32 popDefault);
+
+            //[PreserveSig]
+            //Int32 GetEnumTypeList([In] ref Guid riid, [Out] out IPropertyEnumTypeList ppv);
+
             // === All Other Methods Deferred Until Later! ===
         }
+
+        [DllImport("shell32.dll", SetLastError = true, CallingConvention = CallingConvention.StdCall, PreserveSig = false)]
+        public static extern void SHGetPropertyStoreFromParsingName(
+                [In][MarshalAs(UnmanagedType.LPWStr)] string pszPath,
+                [In] IntPtr zeroWorks,
+                [In] GETPROPERTYSTOREFLAGS flags,
+                [In] ref Guid iIdPropStore,
+                [Out] out IPropertyStore propertyStore);
+
+        [DllImport("propsys.dll", SetLastError = true, CallingConvention = CallingConvention.StdCall, PreserveSig = false)]
+        public static extern void PSGetPropertySystem([In] ref Guid iIdPropertySystem, [Out] out IPropertySystem propertySystem);
 
         [Flags]
         public enum GETPROPERTYSTOREFLAGS : uint
@@ -976,17 +1048,6 @@ namespace WinShell
             GPS_NO_OPLOCK = 0x00000080,   // some data sources protect the read property store with an oplock, this disables that
             GPS_MASK_VALID = 0x000000FF,
         }
-
-        [DllImport("shell32.dll", SetLastError = true, CallingConvention = CallingConvention.StdCall, PreserveSig = false)]
-        public static extern void SHGetPropertyStoreFromParsingName(
-                [In][MarshalAs(UnmanagedType.LPWStr)] string pszPath,
-                [In] IntPtr zeroWorks,
-                [In] GETPROPERTYSTOREFLAGS flags,
-                [In] ref Guid iIdPropStore,
-                [Out] out IPropertyStore propertyStore);
-
-        [DllImport("propsys.dll", SetLastError = true, CallingConvention = CallingConvention.StdCall, PreserveSig = false)]
-        public static extern void PSGetPropertySystem([In] ref Guid iIdPropertySystem, [Out] out IPropertySystem propertySystem);
 
     } // class PropertyStoreInterop
 

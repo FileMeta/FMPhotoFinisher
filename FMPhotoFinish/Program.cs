@@ -180,6 +180,11 @@ Operations:
   -tag <tag>       Add a keyword tag to each file. This parameter may be
                    repeated to add multiple tags.
 
+  -deduplicate     Remove duplicate media files. When copying, (using the
+                   -d argument) then duplicates are simply not copied.
+                   If in-place or moving (using the -move argument) then
+                   duplicates are deleted.
+
 Other Options:
 
   -h               Print this help text and exit (ignoring all other
@@ -515,6 +520,10 @@ Timezones:
                             photoFinisher.SetUuid = true;
                             photoFinisher.Transcode = true;
                             photoFinisher.AlwaysSetDate = true;
+                            break;
+
+                        case "-deduplicate":
+                            photoFinisher.DeDuplicate = true;
                             break;
 
                         case "-setdate":

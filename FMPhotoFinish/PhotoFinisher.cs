@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -25,6 +27,10 @@ namespace FMPhotoFinish
         // DCF Directories from which files were selected
         // This supports later cleanup of empty directories when move is used.
         List<string> m_dcfDirectories = new List<string>();
+
+        // Deduplicate hashset
+        HashSet<Guid> m_duplicateHash;
+        int m_duplicatesRemoved;
 
         // Progress Reporting
 
@@ -74,6 +80,11 @@ namespace FMPhotoFinish
         /// Move files (instead of copying them) to the destination directory.
         /// </summary>
         public bool Move { get; set; }
+
+        /// <summary>
+        /// Remove duplicates or, when copying, do not copy duplcates.
+        /// </summary>
+        public bool DeDuplicate { get; set; }
 
         /// <summary>
         /// Set the Date to the specified value
@@ -147,12 +158,12 @@ namespace FMPhotoFinish
         /// </summary>
         public IList<string> AddKeywords { get; private set; }
 
-        #endregion Operations
-
         /// <summary>
         /// The destination directory - files will be copied or moved there.
         /// </summary>
         public string DestinationDirectory { get; set; }
+
+        #endregion Operations
 
         /// <summary>
         /// Select files for processing using directory path with wildcards.
@@ -309,11 +320,21 @@ namespace FMPhotoFinish
                 }
             }
 
+            if (DeDuplicate)
+            {
+                m_duplicateHash = new HashSet<Guid>();  // Required if de-duplicating
+            }
+
             ProcessMediaFiles();
 
             MediaFile.DisposeOfStaticResources();
 
             OnProgressReport(null);
+            if (m_duplicatesRemoved != 0)
+            {
+                OnProgressReport($"{m_duplicatesRemoved} Duplicates Removed.");
+            }
+            OnProgressReport($"{m_selectedFiles.Count - m_duplicatesRemoved} Files Processed.");
             OnProgressReport("All operations complete!");
         }
 
@@ -335,6 +356,19 @@ namespace FMPhotoFinish
 
             try
             {
+                // First, check for duplicate
+                if (DeDuplicate)
+                {
+                    var hash = CalculateMd5Hash(fi.Filepath);
+                    if (!m_duplicateHash.Add(hash))
+                    {
+                        OnProgressReport("   Removing Duplicate");
+                        File.Delete(fi.Filepath);
+                        ++m_duplicatesRemoved;
+                        return;
+                    }
+                }
+
                 using (var mdf = new MediaFile(fi.Filepath, Path.GetFileName(fi.OriginalFilepath)))
                 {
                     mdf.OriginalDateCreated = fi.OriginalDateCreated;
@@ -682,6 +716,18 @@ namespace FMPhotoFinish
                     OnProgressReport($"Error cleaning up folders on removable drive '{Path.GetPathRoot(directoryName)}': {err.Message}");
                 }
             }
+        }
+
+        private static Guid CalculateMd5Hash(string filepath)
+        {
+            byte[] hash;
+            using (var stream = new FileStream(filepath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                MD5 hasher = MD5.Create();
+                hash = hasher.ComputeHash(stream);
+            }
+            Debug.Assert(hash.Length == 16);
+            return new Guid(hash);  // Conveniently, a GUID is the same size as an MD5 hash - 128 bits
         }
 
         private static char[] s_wildcards = new char[] { '*', '?' };

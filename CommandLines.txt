@@ -4,3 +4,7 @@ Standard Regression Test:
 
 Process Disney PhotoPass:
 -s "\\akershus\Archive\Photos\Disney 2019 For Sorting\Unpacked" -d "\\akershus\Archive\Photos\Disney 2019 For Sorting\Processed" -w -autorot -metaFileNames -transcode -determineDate -setTimeZone ET -updateFsCreate -deduplicate -tag DisneyPhotoPass
+
+DeDuplicate Test
+-s "E:\SampleData\PhotoFinisherUnitTest" -d "E:\FMPhotoFinisher Test Output" -w -allTheWay -deDuplicate
+

@@ -101,6 +101,33 @@ namespace FMPhotoFinish
             return GetMediaType(filenameOrExtension) != MediaType.Unsupported;
         }
 
+        public static DateTime? GetBookmarkDate(string filepath)
+        {
+            // First try getting it from the filename. That's the best option
+            // because it's fastest and it's consistently local time regardless
+            // of video or photo.
+            {
+                DateTime date;
+                if (TryParseDateTimeFromFilename(Path.GetFileName(filepath), out date))
+                {
+                    Debug.Assert(date.Kind == DateTimeKind.Local);
+                    return date;
+                }
+            }
+
+            using (var propstore = PropertyStore.Open(filepath, false))
+            {
+                var date = (DateTime?)propstore.GetValue(PropertyKeys.DateTaken);
+                if (!date.HasValue) return date;
+                {
+                    date = (DateTime?)propstore.GetValue(PropertyKeys.DateEncoded);
+                }
+                if (!date.HasValue) return null;
+
+                return date.Value.ToLocalTime();
+            }
+        }
+
         public static void MakeFilepathUnique(ref string filepath)
         {
             if (!File.Exists(filepath)) return;

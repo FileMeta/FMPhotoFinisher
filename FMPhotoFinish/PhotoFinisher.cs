@@ -19,10 +19,15 @@ namespace FMPhotoFinish
             AddKeywords = new List<string>();
         }
 
+        // Source
+        SourceType m_sourceType;
+        string m_sourcePath;
+
         // Selected Files
         List<ProcessFileInfo> m_selectedFiles = new List<ProcessFileInfo>();
         HashSet<string> m_selectedFilesHash = new HashSet<string>();
         long m_selectedFilesSize;
+        DateTime m_newestSelection;
 
         // DCF Directories from which files were selected
         // This supports later cleanup of empty directories when move is used.
@@ -170,17 +175,38 @@ namespace FMPhotoFinish
         /// </summary>
         /// <param name="path">The path (including possible wildcards) of files to sleect.</param>
         /// <param name="recursive">If true, traverse subdirectories for matching files as well.</param>
-        /// <returns>The number of files selected.</returns>
         /// <remarks>
         /// <para>Wildcards may only appear in the filename, not in the earlier parts of the path.
         /// </para>
         /// </remarks>
-        public int SelectFiles(string path, bool recursive)
+        public void SelectFiles(string path, bool recursive)
         {
-            int count = 0;
-            SelectFiles(path, recursive, ref count);
-            return count;
+            ValidateSelectFiles(path);
+            m_sourceType = recursive ? SourceType.FilePatternRecursive : SourceType.FilePattern;
+            m_sourcePath = path;
         }
+
+        /// <summary>
+        /// Selects all media files from attached DCF devices.
+        /// </summary>
+        /// <returns>The number of files selected.</returns>
+        /// <remarks>
+        /// <para>Finds each removable storage device (such as a flash drive or an attached camera).
+        /// For each device, looks for a "DCIM" folder according to the DCF (Design Rule for Camera
+        /// File System) specification. If found, traverses all subfolders and selects the associated
+        /// files.
+        /// </para>
+        /// </remarks>
+        public void SelectDcimFiles()
+        {
+            m_sourceType = SourceType.DCIM;
+            m_sourcePath = null;
+        }
+
+        /// <summary>
+        /// Limits selected files to those that occur after the specified date/time
+        /// </summary>
+        public DateTime? SelectAfter { get; set; }
 
         /// <summary>
         /// For testing purposes. Copies files from a DCIM_Test directory into the DCIM
@@ -219,13 +245,13 @@ namespace FMPhotoFinish
             return count;
         }
 
-        private int CopyRecursive(DirectoryInfo src, DirectoryInfo dst)
+        private static int CopyRecursive(DirectoryInfo src, DirectoryInfo dst)
         {
             if (!dst.Exists) dst.Create();
 
             int count = 0;
 
-            foreach(var fi in src.GetFiles())
+            foreach (var fi in src.GetFiles())
             {
                 string dstName = Path.Combine(dst.FullName, fi.Name);
                 if (!File.Exists(dstName) && !Directory.Exists(dstName))
@@ -235,7 +261,7 @@ namespace FMPhotoFinish
                 }
             }
 
-            foreach(var di in src.GetDirectories())
+            foreach (var di in src.GetDirectories())
             {
                 count += CopyRecursive(di, new DirectoryInfo(Path.Combine(dst.FullName, di.Name)));
             }
@@ -243,67 +269,59 @@ namespace FMPhotoFinish
             return count;
         }
 
-        /// <summary>
-        /// Selects all media files from attached DCF devices.
-        /// </summary>
-        /// <returns>The number of files selected.</returns>
-        /// <remarks>
-        /// <para>Finds each removable storage device (such as a flash drive or an attached camera).
-        /// For each device, looks for a "DCIM" folder according to the DCF (Design Rule for Camera
-        /// File System) specification. If found, traverses all subfolders and selects the associated
-        /// files.
-        /// </para>
-        /// </remarks>
-        public int SelectDcimFiles()
+        public void PerformSelection()
         {
-            List<string> sourceFolders = new List<string>();
-
-            // Process each removable drive
-            foreach (DriveInfo drv in DriveInfo.GetDrives())
+            switch (m_sourceType)
             {
-                if (drv.IsReady && drv.DriveType == DriveType.Removable)
-                {
-                    try
+                case SourceType.FilePattern:
                     {
-                        // File system structure is according to JEITA "Design rule for Camera File System (DCF) which is JEITA specification CP-3461
-                        // See if the DCIM folder exists
-                        DirectoryInfo dcim = new DirectoryInfo(Path.Combine(drv.RootDirectory.FullName, c_dcimDirectory));
-                        if (dcim.Exists)
-                        {
-                            // Folders containing images must be named with three digits followed
-                            // by five alphanumeric characters. First digit cannot be zero.
-                            foreach (DirectoryInfo di in dcim.EnumerateDirectories())
-                            {
-                                if (di.Name.Length == 8)
-                                {
-                                    int dirnum;
-                                    if (int.TryParse(di.Name.Substring(0, 3), out dirnum) && dirnum >= 100 && dirnum <= 999)
-                                    {
-                                        sourceFolders.Add(di.FullName);
-                                    }
-                                }
-                            }
-                        }
+                        OnProgressReport($"Selecting from: {m_sourcePath}");
+                        int n = InternalSelectFiles(m_sourcePath, false);
+                        OnProgressReport($"   {n} media files selected.");
                     }
-                    catch (Exception)
-                    {
-                        // Suppress the error and move to the next drive.
-                    }
-                } // If drive is ready and removable
-            } // for each drive
+                    break;
 
-            int count = 0;
-            foreach (var path in sourceFolders)
-            {
-                int bookmark = count;
-                // Count is passed by reference so that the status report makes sense.
-                SelectFiles(path, false, ref count);
-                if (count > bookmark) m_dcfDirectories.Add(path);
+                case SourceType.FilePatternRecursive:
+                    {
+                        OnProgressReport($"Selecting tree: {m_sourcePath}");
+                        int n = InternalSelectFiles(m_sourcePath, true);
+                        OnProgressReport($"   {n} media files selected.");
+                    }
+                    break;
+
+                case SourceType.DCIM:
+                    {
+                        int n = InternalSelectDcimFiles();
+                        OnProgressReport($"Selected {n} from removable camera devices.");
+                    }
+                    break;
             }
+            if (SelectAfter.HasValue)
+            {
+                if (m_newestSelection == DateTime.MinValue)
+                {
+                    Debug.Assert(m_selectedFiles.Count == 0);
+                    m_newestSelection = SelectAfter.Value;
+                }
+                else
+                {
+                    OnProgressReport($"   {m_newestSelection:yyyy'-'MM'-'dd'T'HH':'mm':'ss} Newest Selection.");
+                }
 
-            return count;
+                // Temporary Hack
+                {
+                    string bookmarkFilename = Path.Combine(DestinationDirectory, "FMPhotoFinish_Bookmarks.txt");
+                    using (var writer = new StreamWriter(bookmarkFilename, true))
+                    {
+                        writer.WriteLine($"select: {m_sourceType}");
+                        if (m_sourcePath != null)
+                            writer.WriteLine($"path: {m_sourcePath}");
+                        writer.WriteLine($"newestSelection: {m_newestSelection:yyyy'-'MM'-'dd'T'HH':'mm':'ss}");
+                        writer.WriteLine();
+                    }
+                }
+            }
         }
-
 
         public void PerformOperations()
         {
@@ -335,6 +353,13 @@ namespace FMPhotoFinish
                 OnProgressReport($"{m_duplicatesRemoved} Duplicates Removed.");
             }
             OnProgressReport($"{m_selectedFiles.Count - m_duplicatesRemoved} Files Processed.");
+
+            if (SelectAfter.HasValue)
+            {
+                Debug.Assert(m_newestSelection > DateTime.MinValue);
+                OnProgressReport($"{m_newestSelection:yyyy'-'MM'-'dd'T'HH':'mm':'ss} Newest Selection.");
+            }
+
             OnProgressReport("All operations complete!");
         }
 
@@ -542,67 +567,106 @@ namespace FMPhotoFinish
             }
         }
 
+        // Throws an exception if the path isn't valid
+        private void ValidateSelectFiles(string path)
+        {
+            string directory;
+            string pattern;
+            ParseSelectFilesPath(path, out directory, out pattern);
+        }
+
+        private void ParseSelectFilesPath(string path, out string directory, out string pattern)
+        {
+            // If has wildcards, separate the parts
+            if (HasWildcard(path))
+            {
+                directory = Path.GetDirectoryName(path);
+                pattern = Path.GetFileName(path);
+                if (HasWildcard(directory))
+                {
+                    throw new ArgumentException($"Source '{path}' is invalid. Wildcards not allowed in directory name.");
+                }
+                if (string.IsNullOrEmpty(directory))
+                {
+                    directory = Environment.CurrentDirectory;
+                }
+            }
+
+            else if (Directory.Exists(path))
+            {
+                directory = path;
+                pattern = "*";
+            }
+
+            else
+            {
+                directory = Path.GetDirectoryName(path);
+                pattern = Path.GetFileName(path);
+                if (string.IsNullOrEmpty(directory))
+                {
+                    directory = Environment.CurrentDirectory;
+                }
+                if (!Directory.Exists(directory))
+                {
+                    throw new ArgumentException($"Source '{path}' does not exist.");
+                }
+            }
+        }
+
         // <summary>
         // Internal selectfiles - takes count by reference so that the progress report can
         // use the total count.
         // </summary>
-        private void SelectFiles(string path, bool recursive, ref int count)
+        private int InternalSelectFiles(string path, bool recursive, int padStatusCount = 0)
         {
+            int count = 0;
+            int skipped = 0;
+            string directory;
+            string pattern;
+
+            ParseSelectFilesPath(path, out directory, out pattern);
+
             try
             {
-                string directory;
-                string pattern;
-
-                // If has wildcards, separate the parts
-                if (HasWildcard(path))
-                {
-                    directory = Path.GetDirectoryName(path);
-                    pattern = Path.GetFileName(path);
-                    if (HasWildcard(directory))
-                    {
-                        throw new ArgumentException($"Source '{path}' is invalid. Wildcards not allowed in directory name.");
-                    }
-                    if (string.IsNullOrEmpty(directory))
-                    {
-                        directory = Environment.CurrentDirectory;
-                    }
-                }
-
-                else if (Directory.Exists(path))
-                {
-                    directory = path;
-                    pattern = "*";
-                }
-
-                else
-                {
-                    directory = Path.GetDirectoryName(path);
-                    pattern = Path.GetFileName(path);
-                    if (string.IsNullOrEmpty(directory))
-                    {
-                        directory = Environment.CurrentDirectory;
-                    }
-                    if (!Directory.Exists(directory))
-                    {
-                        throw new ArgumentException($"Source '{path}' does not exist.");
-                    }
-                }
+                m_newestSelection = DateTime.MinValue;
 
                 DirectoryInfo di = new DirectoryInfo(directory);
                 foreach (var fi in di.EnumerateFiles(pattern, recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly))
                 {
+                    if (((count + skipped) % 100) == 0)
+                    {
+                        string message = (skipped == 0)
+                            ? $"Selected: {count + padStatusCount}"
+                            : $"Selected: {count + padStatusCount} Not Selected: {skipped}";
+                        OnStatusReport(message);
+                    }
+
                     if (MediaFile.IsSupportedMediaType(fi.Extension))
                     {
+                        // Limit date window of files to be selected
+                        if (SelectAfter.HasValue)
+                        {
+                            var date = MediaFile.GetBookmarkDate(fi.FullName);
+                            if (!date.HasValue || date.Value <= SelectAfter.Value)
+                            {
+                                ++skipped;
+                                continue;
+                            }
+
+                            // For this operation, we do everything in localtime because photo
+                            // DateTaken metadata is in localtime.
+                            // This is after-the-fact but since it's a debugging test that's OK.
+                            Debug.Assert(date.Value.Kind == DateTimeKind.Local);
+
+                            if (m_newestSelection < date.Value)
+                                m_newestSelection = date.Value;
+                        }
+
                         if (m_selectedFilesHash.Add(fi.FullName.ToLowerInvariant()))
                         {
                             m_selectedFiles.Add(new ProcessFileInfo(fi));
                             m_selectedFilesSize += fi.Length;
                             ++count;
-                            if ((count % 100) == 0)
-                            {
-                                OnStatusReport($"Selected: {count}");
-                                // For testing: System.Threading.Thread.Sleep(250);
-                            }
                         }
                     }
                 }
@@ -611,6 +675,58 @@ namespace FMPhotoFinish
             {
                 throw new ArgumentException($"Source '{path}' not found. ({err.Message})", err);
             }
+
+            return count;
+        }
+
+        private int InternalSelectDcimFiles()
+        {
+            List<string> sourceFolders = new List<string>();
+
+            // Process each removable drive
+            foreach (DriveInfo drv in DriveInfo.GetDrives())
+            {
+                if (drv.IsReady && drv.DriveType == DriveType.Removable)
+                {
+                    try
+                    {
+                        // File system structure is according to JEITA "Design rule for Camera File System (DCF) which is JEITA specification CP-3461
+                        // See if the DCIM folder exists
+                        DirectoryInfo dcim = new DirectoryInfo(Path.Combine(drv.RootDirectory.FullName, c_dcimDirectory));
+                        if (dcim.Exists)
+                        {
+                            // Folders containing images must be named with three digits followed
+                            // by five alphanumeric characters. First digit cannot be zero.
+                            foreach (DirectoryInfo di in dcim.EnumerateDirectories())
+                            {
+                                if (di.Name.Length == 8)
+                                {
+                                    int dirnum;
+                                    if (int.TryParse(di.Name.Substring(0, 3), out dirnum) && dirnum >= 100 && dirnum <= 999)
+                                    {
+                                        sourceFolders.Add(di.FullName);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        // Suppress the error and move to the next drive.
+                    }
+                } // If drive is ready and removable
+            } // for each drive
+
+            int count = 0;
+            foreach (var path in sourceFolders)
+            {
+                int bookmark = count;
+                int n = InternalSelectFiles(path, false, count);
+                if (n > 0) m_dcfDirectories.Add(path);
+                count += n;
+            }
+
+            return count;
         }
 
         private void CopyOrMoveFiles()
@@ -741,6 +857,13 @@ namespace FMPhotoFinish
         {
             if (tz.Kind != FileMeta.TimeZoneKind.Normal) return $"({tz.Kind})";
             return tz.ToString();
+        }
+
+        private enum SourceType
+        {
+            FilePattern = 1,
+            FilePatternRecursive = 2,
+            DCIM = 3
         }
 
     } // Class PhotoFinisher

@@ -93,6 +93,12 @@ Source:
                    cameras. This is the best option for retrieving from
                    digital cameras or memory cards from cameras.
 
+  -selectAfter <dateTime> Only select files from the source with a DateTaken
+                   (for photos) or equivalent (for video and audio) after
+                   the specified date/time. If the file does not have date
+                   metadata then it will not be included. If timezone is not
+                   specified then local timezone is assumed.
+
 Destination:
   If no destination is specified, then the updates are made in-place.
 
@@ -400,9 +406,7 @@ Timezones:
                                     break;
                                 }
 
-                                Console.WriteLine($"Selecting from: {args[i]}");
-                                int n = photoFinisher.SelectFiles(args[i], false);
-                                Console.WriteLine($"   {n} media files selected.");
+                                photoFinisher.SelectFiles(args[i], false);
                             }
                             break;
 
@@ -416,10 +420,12 @@ Timezones:
                                     break;
                                 }
 
-                                Console.WriteLine($"Selecting tree: \"{args[i]}\"");
-                                int n = photoFinisher.SelectFiles(args[i], true);
-                                Console.WriteLine($"   {n} media files selected.");
+                                photoFinisher.SelectFiles(args[i], true);
                             }
+                            break;
+
+                        case "-sdcim":
+                            photoFinisher.SelectDcimFiles();
                             break;
 
                         case "-copydcim":
@@ -430,10 +436,28 @@ Timezones:
                             }
                             break;
 
-                        case "-sdcim":
+                        case "-selectafter":
                             {
-                                int n = photoFinisher.SelectDcimFiles();
-                                Console.WriteLine($"Selected {n} from removable camera devices.");
+                                ++i;
+                                if (i >= args.Length)
+                                {
+                                    Console.WriteLine($"Expected value for -selectAfter command-line argument.");
+                                    s_commandLineError = true;
+                                    break;
+                                }
+
+                                FileMeta.DateTag dt;
+                                if (!FileMeta.DateTag.TryParse(args[i], out dt))
+                                {
+                                    Console.WriteLine($"Invalid value for -setDate '{args[i]}'.");
+                                    s_commandLineError = true;
+                                    break;
+                                }
+
+                                // Default to the local timezone if needed
+                                dt = dt.ResolveTimeZone(TimeZoneInfo.Local);
+
+                                photoFinisher.SelectAfter = dt.Date;
                             }
                             break;
 
@@ -763,6 +787,7 @@ Timezones:
             }
 
             // Do the work.
+            photoFinisher.PerformSelection();
             photoFinisher.PerformOperations();
         }
 

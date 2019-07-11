@@ -99,6 +99,13 @@ Source:
                    metadata then it will not be included. If timezone is not
                    specified then local timezone is assumed.
 
+  -selectIncremental Select files with a DateTaken value that is newer than
+                   the newest file found in the last incremental selection.
+                   A file, FMPhotoFinisher_Incremental.json, will be written
+                   in the destination to keep track of the date of the newest
+                   selected file. When combined with ""-selectAfter"" then
+                   the most recent date from the two options will be used.
+
 Destination:
   If no destination is specified, then the updates are made in-place.
 
@@ -459,6 +466,10 @@ Timezones:
 
                                 photoFinisher.SelectAfter = dt.Date;
                             }
+                            break;
+
+                        case "-selectincremental":
+                            photoFinisher.SelectIncremental = true;
                             break;
 
                         case "-d":

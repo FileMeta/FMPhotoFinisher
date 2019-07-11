@@ -27,7 +27,6 @@ namespace FMPhotoFinish
         List<ProcessFileInfo> m_selectedFiles = new List<ProcessFileInfo>();
         HashSet<string> m_selectedFilesHash = new HashSet<string>();
         long m_selectedFilesSize;
-        DateTime m_newestSelection;
 
         // DCF Directories from which files were selected
         // This supports later cleanup of empty directories when move is used.
@@ -209,6 +208,12 @@ namespace FMPhotoFinish
         public DateTime? SelectAfter { get; set; }
 
         /// <summary>
+        /// Selects files that have changed since the last SelectIncremental on the same
+        /// source and destination.
+        /// </summary>
+        public bool SelectIncremental { get; set; }
+
+        /// <summary>
         /// For testing purposes. Copies files from a DCIM_Test directory into the DCIM
         /// directory.
         /// </summary>
@@ -296,31 +301,7 @@ namespace FMPhotoFinish
                     }
                     break;
             }
-            if (SelectAfter.HasValue)
-            {
-                if (m_newestSelection == DateTime.MinValue)
-                {
-                    Debug.Assert(m_selectedFiles.Count == 0);
-                    m_newestSelection = SelectAfter.Value;
-                }
-                else
-                {
-                    OnProgressReport($"   {m_newestSelection:yyyy'-'MM'-'dd'T'HH':'mm':'ss} Newest Selection.");
-                }
 
-                // Temporary Hack
-                {
-                    string bookmarkFilename = Path.Combine(DestinationDirectory, "FMPhotoFinish_Bookmarks.txt");
-                    using (var writer = new StreamWriter(bookmarkFilename, true))
-                    {
-                        writer.WriteLine($"select: {m_sourceType}");
-                        if (m_sourcePath != null)
-                            writer.WriteLine($"path: {m_sourcePath}");
-                        writer.WriteLine($"newestSelection: {m_newestSelection:yyyy'-'MM'-'dd'T'HH':'mm':'ss}");
-                        writer.WriteLine();
-                    }
-                }
-            }
         }
 
         public void PerformOperations()
@@ -353,12 +334,6 @@ namespace FMPhotoFinish
                 OnProgressReport($"{m_duplicatesRemoved} Duplicates Removed.");
             }
             OnProgressReport($"{m_selectedFiles.Count - m_duplicatesRemoved} Files Processed.");
-
-            if (SelectAfter.HasValue)
-            {
-                Debug.Assert(m_newestSelection > DateTime.MinValue);
-                OnProgressReport($"{m_newestSelection:yyyy'-'MM'-'dd'T'HH':'mm':'ss} Newest Selection.");
-            }
 
             OnProgressReport("All operations complete!");
         }
@@ -624,11 +599,27 @@ namespace FMPhotoFinish
             string directory;
             string pattern;
 
+            // Determine the "after" threshold from SelectAfter and SelectIncremental
+            DateTime? after = SelectAfter;
+            if (SelectIncremental)
+            {
+                var bookmark = new IncrementalBookmark(DestinationDirectory);
+                var incrementalAfter = bookmark.GetBookmark(path);
+                if (incrementalAfter.HasValue)
+                {
+                    if (!after.HasValue || after.Value < incrementalAfter.Value)
+                    {
+                        after = incrementalAfter;
+                    }
+                }
+            }
+
+            // Determine the path being selected
             ParseSelectFilesPath(path, out directory, out pattern);
 
             try
             {
-                m_newestSelection = DateTime.MinValue;
+                DateTime newestSelection = after ?? DateTime.MinValue;
 
                 DirectoryInfo di = new DirectoryInfo(directory);
                 foreach (var fi in di.EnumerateFiles(pattern, recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly))
@@ -644,10 +635,10 @@ namespace FMPhotoFinish
                     if (MediaFile.IsSupportedMediaType(fi.Extension))
                     {
                         // Limit date window of files to be selected
-                        if (SelectAfter.HasValue)
+                        if (after.HasValue)
                         {
                             var date = MediaFile.GetBookmarkDate(fi.FullName);
-                            if (!date.HasValue || date.Value <= SelectAfter.Value)
+                            if (!date.HasValue || date.Value <= after.Value)
                             {
                                 ++skipped;
                                 continue;
@@ -658,8 +649,8 @@ namespace FMPhotoFinish
                             // This is after-the-fact but since it's a debugging test that's OK.
                             Debug.Assert(date.Value.Kind == DateTimeKind.Local);
 
-                            if (m_newestSelection < date.Value)
-                                m_newestSelection = date.Value;
+                            if (newestSelection < date.Value)
+                                newestSelection = date.Value;
                         }
 
                         if (m_selectedFilesHash.Add(fi.FullName.ToLowerInvariant()))
@@ -669,6 +660,15 @@ namespace FMPhotoFinish
                             ++count;
                         }
                     }
+                }
+
+                // If SelectIncremental, write out the new bookmark
+                if (SelectIncremental && count > 0)
+                {
+                    Debug.Assert(newestSelection > DateTime.MinValue);
+                    OnProgressReport($"{newestSelection:yyyy'-'MM'-'dd'T'HH':'mm':'ss} Newest Selection.");
+                    var bookmark = new IncrementalBookmark(DestinationDirectory);
+                    bookmark.SetBookmark(path, newestSelection);
                 }
             }
             catch (Exception err)

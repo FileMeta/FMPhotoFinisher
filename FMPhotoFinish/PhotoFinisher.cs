@@ -27,6 +27,7 @@ namespace FMPhotoFinish
         List<ProcessFileInfo> m_selectedFiles = new List<ProcessFileInfo>();
         HashSet<string> m_selectedFilesHash = new HashSet<string>();
         long m_selectedFilesSize;
+        int m_skippedFiles;
 
         // DCF Directories from which files were selected
         // This supports later cleanup of empty directories when move is used.
@@ -281,23 +282,30 @@ namespace FMPhotoFinish
                 case SourceType.FilePattern:
                     {
                         OnProgressReport($"Selecting from: {m_sourcePath}");
-                        int n = InternalSelectFiles(m_sourcePath, false);
-                        OnProgressReport($"   {n} media files selected.");
+                        InternalSelectFiles(m_sourcePath, false);
+                        if (m_skippedFiles == 0)
+                            OnProgressReport($"   {m_selectedFiles.Count} media files selected.");
+                        else
+                            OnProgressReport($"   {m_selectedFiles.Count} media files selected; {m_skippedFiles} skipped.");
+
                     }
                     break;
 
                 case SourceType.FilePatternRecursive:
                     {
                         OnProgressReport($"Selecting tree: {m_sourcePath}");
-                        int n = InternalSelectFiles(m_sourcePath, true);
-                        OnProgressReport($"   {n} media files selected.");
+                        InternalSelectFiles(m_sourcePath, true);
+                        if (m_skippedFiles == 0)
+                            OnProgressReport($"   {m_selectedFiles.Count} media files selected.");
+                        else
+                            OnProgressReport($"   {m_selectedFiles.Count} media files selected; {m_skippedFiles} skipped.");
                     }
                     break;
 
                 case SourceType.DCIM:
                     {
-                        int n = InternalSelectDcimFiles();
-                        OnProgressReport($"Selected {n} from removable camera devices.");
+                        InternalSelectDcimFiles();
+                        OnProgressReport($"Selected {m_selectedFiles.Count} from removable camera devices.");
                     }
                     break;
             }
@@ -592,10 +600,8 @@ namespace FMPhotoFinish
         // Internal selectfiles - takes count by reference so that the progress report can
         // use the total count.
         // </summary>
-        private int InternalSelectFiles(string path, bool recursive, int padStatusCount = 0)
+        private void InternalSelectFiles(string path, bool recursive)
         {
-            int count = 0;
-            int skipped = 0;
             string directory;
             string pattern;
 
@@ -617,18 +623,18 @@ namespace FMPhotoFinish
             // Determine the path being selected
             ParseSelectFilesPath(path, out directory, out pattern);
 
+            DateTime newestSelection = after ?? DateTime.MinValue;
+
             try
             {
-                DateTime newestSelection = after ?? DateTime.MinValue;
-
                 DirectoryInfo di = new DirectoryInfo(directory);
                 foreach (var fi in di.EnumerateFiles(pattern, recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly))
                 {
-                    if (((count + skipped) % 100) == 0)
+                    if (((m_selectedFiles.Count + m_skippedFiles) % 100) == 0)
                     {
-                        string message = (skipped == 0)
-                            ? $"Selected: {count + padStatusCount}"
-                            : $"Selected: {count + padStatusCount} Not Selected: {skipped}";
+                        string message = (m_skippedFiles == 0)
+                            ? $"Selected: {m_selectedFiles.Count}"
+                            : $"Selected: {m_selectedFiles.Count} Not Selected: {m_skippedFiles}";
                         OnStatusReport(message);
                     }
 
@@ -640,7 +646,7 @@ namespace FMPhotoFinish
                             var date = MediaFile.GetBookmarkDate(fi.FullName);
                             if (!date.HasValue || date.Value <= after.Value)
                             {
-                                ++skipped;
+                                ++m_skippedFiles;
                                 continue;
                             }
 
@@ -657,29 +663,27 @@ namespace FMPhotoFinish
                         {
                             m_selectedFiles.Add(new ProcessFileInfo(fi));
                             m_selectedFilesSize += fi.Length;
-                            ++count;
                         }
                     }
-                }
-
-                // If SelectIncremental, write out the new bookmark
-                if (SelectIncremental && count > 0)
-                {
-                    Debug.Assert(newestSelection > DateTime.MinValue);
-                    OnProgressReport($"{newestSelection:yyyy'-'MM'-'dd'T'HH':'mm':'ss} Newest Selection.");
-                    var bookmark = new IncrementalBookmark(DestinationDirectory);
-                    bookmark.SetBookmark(path, newestSelection);
                 }
             }
             catch (Exception err)
             {
                 throw new ArgumentException($"Source '{path}' not found. ({err.Message})", err);
             }
+            OnStatusReport(null);
 
-            return count;
+            // If SelectIncremental, write out the new bookmark
+            if (SelectIncremental && m_selectedFiles.Count > 0)
+            {
+                Debug.Assert(newestSelection > DateTime.MinValue);
+                OnProgressReport($"   Newest: {newestSelection:yyyy'-'MM'-'dd' 'HH':'mm':'ss}");
+                var bookmark = new IncrementalBookmark(DestinationDirectory);
+                bookmark.SetBookmark(path, newestSelection);
+            }
         }
 
-        private int InternalSelectDcimFiles()
+        private void InternalSelectDcimFiles()
         {
             List<string> sourceFolders = new List<string>();
 
@@ -717,16 +721,12 @@ namespace FMPhotoFinish
                 } // If drive is ready and removable
             } // for each drive
 
-            int count = 0;
             foreach (var path in sourceFolders)
             {
-                int bookmark = count;
-                int n = InternalSelectFiles(path, false, count);
-                if (n > 0) m_dcfDirectories.Add(path);
-                count += n;
+                int bookmark = m_selectedFiles.Count;
+                InternalSelectFiles(path, false);
+                if (m_selectedFiles.Count > bookmark) m_dcfDirectories.Add(path);
             }
-
-            return count;
         }
 
         private void CopyOrMoveFiles()

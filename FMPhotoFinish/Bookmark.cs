@@ -45,11 +45,10 @@ namespace FMPhotoFinish
 
             if (bookmark == null) return null;
 
-            DateTime dt;
-            if (!DateTime.TryParse(bookmark.Element(c_newestEle).Value,
-                CultureInfo.InvariantCulture, c_dateParseStyle, out dt)) return null;
-
-            return dt;
+            DateTag dt;
+            if (!DateTag.TryParse(bookmark.Element(c_newestEle).Value, out dt)) return null;
+            dt.ResolveTimeZone(TimeZoneInfo.Local);
+            return dt.Date;
         }
 
         public void SetBookmark(string sourcePath, DateTime bookmarkDate)
@@ -73,7 +72,7 @@ namespace FMPhotoFinish
             }
             else
             {
-                bookmark.Element("c_newestEle").SetValue(dateStr);
+                bookmark.Element(c_newestEle).SetValue(dateStr);
             }
 
             SaveBookmarks(m_destinationPath, doc);
@@ -111,14 +110,11 @@ namespace FMPhotoFinish
                 var fullDocument = new XDocument(doc);
             }
 
-            DumpXml(doc);
-
             return doc;
         }
 
         private static void SaveBookmarks(string destinationPath, XElement doc)
         {
-            DumpXml(doc);
             string bookmarkPath = Path.Combine(destinationPath, c_bookmarkFilename);
 
             using (var stream = new FileStream(bookmarkPath, FileMode.Create, FileAccess.Write, FileShare.None))

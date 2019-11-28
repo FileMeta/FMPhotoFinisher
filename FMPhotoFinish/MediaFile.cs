@@ -15,7 +15,7 @@ namespace FMPhotoFinish
         Unsupported = 0, // Unsupported type
         Image = 1,  // .jpg .jpeg
         Video = 2,  // .mp4 .avi .mov .mpg .mpeg
-        Audio = 3   // .m4a .mp3 .wav 
+        Audio = 3   // .m4a .mp3 .wav .wma
     }
 
     /// <summary>
@@ -56,7 +56,8 @@ namespace FMPhotoFinish
             {".mpeg", MediaType.Video},
             {c_m4aExt, MediaType.Audio},
             {".mp3", MediaType.Audio},
-            {".wav", MediaType.Audio}
+            {".wav", MediaType.Audio},
+            {".wma", MediaType.Audio}
         };
 
         static HashSet<string> s_isomExtensions = new HashSet<string>()

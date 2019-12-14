@@ -37,7 +37,8 @@ namespace FMPhotoFinish
         //const string c_makeKey = "make";
         //const string c_modelKey = "model";
 
-        const string c_defaultTitle = "Pic";
+        // Indexed by MediaType
+        static string[] s_defaultTitle = new string[] { "Null", "Pic", "Vid", "Audio" };
 
         static readonly TimeSpan s_timespanZero = new TimeSpan(0);
 
@@ -176,7 +177,7 @@ namespace FMPhotoFinish
         {
             result = DateTime.MinValue;
             var sb = new StringBuilder();
-            foreach(char c in filename)
+            foreach (char c in filename)
             {
                 if (char.IsDigit(c)) sb.Append(c);
                 if (sb.Length >= 17) break;
@@ -198,21 +199,65 @@ namespace FMPhotoFinish
             }
             if (year < 1900 || year > 2200) return false;
             if (month < 1 || month > 12) return false;
-            if (day < 1 || day > 31) return false;
+            if (day < 1 || day > DateTime.DaysInMonth(year, month)) return false;
             if (hour < 0 || hour > 23) return false;
             if (minute < 0 || minute > 59) return false;
             if (second < 0 || second > 59) return false;
 
-            try
+            result = new DateTime(year, month, day, hour, minute, second, millisecond, DateTimeKind.Local);
+            return true;
+        }
+
+        static Regex s_dateFilename1 = new Regex(@"^(?<y>\d\d)(?<m>\d\d)(?<d>\d\d)_\d{4}\.(?:WMA|wma)$");
+
+        /// <summary>
+        /// Parses DateTime from filename including special known patterns and filling in time from file system when available
+        /// </summary>
+        /// <param name="filename">The filename which may have an embedded date/time.</param>
+        /// <param name="fileSystemDate">The DateModified value from the file system.</param>
+        /// <param name="result">The result, if succeeded.</param>
+        /// <returns>True if the parse succeeded. Else, false.</returns>
+        public static bool TryParseDateTimeFromFilenameEx(string filename, DateTime fileSystemDate, out DateTime result)
+        {
+            // First try the known formats (only one so far)
             {
-                result = new DateTime(year, month, day, hour, minute, second, millisecond, DateTimeKind.Local);
-            }
-            catch (Exception)
-            {
-                return false; // Probaby a month with too many days.
+                var match = s_dateFilename1.Match(filename);
+                if (match.Success)
+                {
+                    // With other patterns this may be extended to capture time.
+                    int year = int.Parse(match.Groups["y"].Value);
+                    int month = int.Parse(match.Groups["m"].Value);
+                    int day = int.Parse(match.Groups["d"].Value);
+                    if (year >= 0 && year <= 99) year += 2000;  // Convert two-digit year
+
+                    if (year >= 1900 && year < 2200
+                        && month >= 1 && month <= 12
+                        && day >= 1 && day <= DateTime.DaysInMonth(year, month))
+                    {
+                        fileSystemDate = fileSystemDate.ToLocalTime();
+                        int hour = 0;
+                        int minute = 0;
+                        int second = 0;
+                        int millisecond = 0;
+                        // If hour, minute, and second are zeros and date matches filesystem value, then fill in the time
+                        if (hour == 0 && minute == 0 && second == 0 && millisecond == 0
+                            && year == fileSystemDate.Year
+                            && month == fileSystemDate.Month
+                            && day == fileSystemDate.Day)
+                        {
+                            hour = fileSystemDate.Hour;
+                            minute = fileSystemDate.Minute;
+                            second = fileSystemDate.Second;
+                            millisecond = fileSystemDate.Millisecond;
+                        }
+
+                        result = new DateTime(year, month, day, hour, minute, second, millisecond, DateTimeKind.Local);
+                        return true;
+                    }
+                }
             }
 
-            return true;
+            return TryParseDateTimeFromFilename(filename, out result);
         }
 
         /// Number of seconds of tolerance when comparing for hours offset
@@ -256,6 +301,7 @@ namespace FMPhotoFinish
 
         // File System Values (In local time)
         string m_fsOriginalFilename;      // Filename when process started.
+        long m_fsOriginalSize;  
         DateTime m_fsDateCreated;
         DateTime m_fsDateModified;
 
@@ -304,6 +350,7 @@ namespace FMPhotoFinish
             // Load Windows Property Store properties
             using (var propstore = PropertyStore.Open(filepath, false))
             {
+                m_fsOriginalSize = (long)(ulong)propstore.GetValue(PropertyKeys.Size);
                 m_fsDateCreated = (DateTime)propstore.GetValue(PropertyKeys.DateCreated);
                 Debug.Assert(m_fsDateCreated.Kind == DateTimeKind.Utc);
                 m_fsDateModified = (DateTime)propstore.GetValue(PropertyKeys.DateModified);
@@ -543,15 +590,33 @@ namespace FMPhotoFinish
             string newName = dt.ToString("yyyy-MM-dd_HHmmss",
                 System.Globalization.CultureInfo.InvariantCulture);
 
+            bool hasName = false;
+
             if (!string.IsNullOrEmpty(m_psSubject))
+            {
                 newName = string.Concat(newName, " ", m_psSubject);
+                hasName = true;
+            }
 
             if (!string.IsNullOrEmpty(m_psTitle))
-                newName = string.Concat(newName, " - ", m_psTitle);
-
-            if (string.IsNullOrEmpty(m_psTitle) && string.IsNullOrEmpty(m_psSubject))
             {
-                newName = string.Concat(newName, " ", c_defaultTitle);
+                newName = string.Concat(newName, " - ", m_psTitle);
+                hasName = true;
+            }
+
+            if (!hasName && m_psKeywords != null && m_psKeywords.Length > 0)
+            {
+                var slug = Slugify(m_psKeywords[0]);
+                if (slug.Length > 0)
+                {
+                    newName = string.Concat(newName, " ", slug);
+                    hasName = true;
+                }
+            }
+
+            if (!hasName)
+            {
+                newName = string.Concat(newName, " ", s_defaultTitle[(int)m_mediaType]);
             }
 
             newName = string.Concat(newName, Path.GetExtension(m_filepath));
@@ -654,7 +719,7 @@ namespace FMPhotoFinish
             // From file naming convention
             {
                 DateTime dt;
-                if (TryParseDateTimeFromFilename(m_fsOriginalFilename, out dt))
+                if (TryParseDateTimeFromFilenameEx(m_fsOriginalFilename, m_fsDateModified, out dt))
                 {
                     m_creationDate = dt;
                     CreationDateSource = "Filename";
@@ -734,7 +799,7 @@ namespace FMPhotoFinish
              * the timezone. */
             DateTime dt;
             if (m_isomCreationTime.HasValue
-                && TryParseDateTimeFromFilename(m_fsOriginalFilename, out dt)
+                && TryParseDateTimeFromFilenameEx(m_fsOriginalFilename, m_fsDateModified, out dt)
                 && TryCalcTimezoneFromMatch(m_isomCreationTime.Value, dt, m_psDuration, out tzMinutes))
             {
                 m_timezone = new TimeZoneTag(tzMinutes, tzMinutes == 0 ? TimeZoneKind.ForceLocal : TimeZoneKind.Normal);
@@ -1174,7 +1239,10 @@ namespace FMPhotoFinish
                 }
                 else if (m_mediaType == MediaType.Audio)
                 {
-                    arguments = $"-hide_banner -i \"{m_filepath}\" {c_ffmpegAudioSettings} \"{newPath}\"";
+                    // Pick quality level based on bitrate of inbound recording
+                    string audioSettings = c_ffmpegAudioSettings + " " + GetAudioQualitySettingFromSourceBitrate();
+                    Debug.WriteLine(audioSettings);
+                    arguments = $"-hide_banner -i \"{m_filepath}\" {audioSettings} \"{newPath}\"";
                 }
                 else
                 {
@@ -1265,6 +1333,30 @@ namespace FMPhotoFinish
             return result;
         }
 
+        string GetAudioQualitySettingFromSourceBitrate()
+        {
+            Debug.Assert(m_mediaType == MediaType.Audio);
+            Debug.Assert(m_psDuration != null);
+            long inboundBps = (m_fsOriginalSize * 8000L) / (long)m_psDuration.Value.TotalMilliseconds;
+
+            //if (inboundBps <= 5632) // 5.5 Kbps
+              //  return "-b:a 5k";
+            if (inboundBps <= 16896) // 16.5 Kbps
+                return "-b:a 16k";
+            else if (inboundBps <= 33280) // 32.5 Kbps
+                return "-b:a 32k";
+            else if (inboundBps <= 66048) // 64.5 Kbps
+                return "-b:a 64k";
+            else if (inboundBps <= 98816) // 96.5 Kbps
+                return "-b:a 96k";
+            else if (inboundBps <= 131584) // 128.5 Kbps
+                return "-b:a 128k";
+            else if (inboundBps <= 192120) // 192.5 Kbps
+                return "-b:a 192k";
+            else
+                return "-b:a 256k";
+        }
+
         static bool TryCalcTimezoneFromMatch(DateTime utcDate, DateTime localDate, TimeSpan? duration, out int timezone)
         {
             Debug.Assert(utcDate.Kind == DateTimeKind.Utc);
@@ -1282,6 +1374,31 @@ namespace FMPhotoFinish
                 if (TryGetTimezoneOffset(localDate, utcDate.Subtract(duration.Value), out timezone)) return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// Creates a slug (a string composed exclusively of alphanumeric characters) from a string
+        /// </summary>
+        /// <param name="value">The string to convert to a slug.</param>
+        /// <returns>The slug. If no alphanumeric characters are available, string is empty.</returns>
+        static string Slugify(string value)
+        {
+            var bldr = new StringBuilder(value.Length);
+            bool prevIsWhitespace = true;
+            foreach(char c in value)
+            {
+                if (char.IsWhiteSpace(c))
+                {
+                    if (!prevIsWhitespace) bldr.Append('-');
+                    prevIsWhitespace = true;
+                }
+                else
+                {
+                    prevIsWhitespace = false;
+                    if (char.IsLetterOrDigit(c)) bldr.Append(c);
+                }
+            }
+            return bldr.ToString();
         }
 
 #endregion // Private Members
@@ -1331,6 +1448,7 @@ namespace FMPhotoFinish
         public static PropertyKey Comment = new PropertyKey("F29F85E0-4FF9-1068-AB91-08002B27B3D9", 6); // 
         public static PropertyKey Subject = new PropertyKey("F29F85E0-4FF9-1068-AB91-08002B27B3D9", 3); // System.Subject
         public static PropertyKey Title = new PropertyKey("F29F85E0-4FF9-1068-AB91-08002B27B3D9", 2); // System.Title
+        public static PropertyKey Size = new PropertyKey("B725F130-47EF-101A-A5F1-02608C9EEBAC", 12); // System.Size
     }
 
     /// <summary>

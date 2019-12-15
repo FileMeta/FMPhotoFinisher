@@ -609,7 +609,7 @@ namespace FMPhotoFinish
                 var slug = Slugify(m_psKeywords[0]);
                 if (slug.Length > 0)
                 {
-                    newName = string.Concat(newName, " ", slug);
+                    newName = string.Concat(newName, " #", slug);
                     hasName = true;
                 }
             }

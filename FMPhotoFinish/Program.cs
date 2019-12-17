@@ -112,9 +112,11 @@ Destination:
   -d <path>        A path to the folder where the processed files should be
                    placed.
 
-  -sort            Auto-sort the transferred files into a directory tree
-                   rooted in the folder specified by -d. The tree hierarchy
-                   is year/month/day.
+  -sortby <patt>   Auto-sort the transferred files into a directory tree
+                   rooted in the folder specified by -d. Supported patterns
+                   are ymd (year/month/day), ym (year/month), y (year).
+
+  -sort            Equivalent to -sortby ymd
 
   -move            Move the files from the source to the destination. If this
                    parameter is not included then the unprocessed original
@@ -477,7 +479,7 @@ Timezones:
                                 ++i;
                                 if (i >= args.Length)
                                 {
-                                    Console.WriteLine($"Expected value for -d command-line argument.");
+                                    Console.WriteLine("Expected value for -d command-line argument.");
                                     s_commandLineError = true;
                                     break;
                                 }
@@ -497,8 +499,37 @@ Timezones:
                             s_waitBeforeExit = true;
                             break;
 
+                        case "-sortby":
+                            {
+                                ++i;
+                                if (i >= args.Length)
+                                {
+                                    Console.WriteLine("Expected value for -sortby command-line argument.");
+                                    s_commandLineError = true;
+                                    break;
+                                }
+
+                                switch (args[i].ToLowerInvariant())
+                                {
+                                    case "y":
+                                        photoFinisher.SortBy = DatePathType.Y;
+                                        break;
+                                    case "ym":
+                                        photoFinisher.SortBy = DatePathType.YM;
+                                        break;
+                                    case "ymd":
+                                        photoFinisher.SortBy = DatePathType.YMD;
+                                        break;
+                                    default:
+                                        Console.WriteLine($"Unexpected value for -sortby: {args[i]}.");
+                                        s_commandLineError = true;
+                                        break;
+                                }
+                            }
+                            break;
+
                         case "-sort":
-                            photoFinisher.AutoSort = true;
+                            photoFinisher.SortBy = DatePathType.YMD;
                             break;
 
                         case "-move":
@@ -715,7 +746,7 @@ Timezones:
                     }
                 }
 
-                if (photoFinisher.AutoSort && string.IsNullOrEmpty(photoFinisher.DestinationDirectory))
+                if (photoFinisher.SortBy != DatePathType.None && string.IsNullOrEmpty(photoFinisher.DestinationDirectory))
                 {
                     Console.WriteLine("Command-line error: '-sort' option requires '-d' destination option.");
                     Console.WriteLine("Use '-h' for syntax help");

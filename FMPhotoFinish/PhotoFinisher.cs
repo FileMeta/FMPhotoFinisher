@@ -146,7 +146,7 @@ namespace FMPhotoFinish
         /// <summary>
         /// Auto-sort the images into directories according to date taken
         /// </summary>
-        public bool AutoSort { get; set; }
+        public DatePathType SortBy { get; set; }
 
         /// <summary>
         /// Save the original filename in a custom metaTag (if it hasn't already been stored).
@@ -512,11 +512,11 @@ namespace FMPhotoFinish
                         OnProgressReport("   Rename to: " + Path.GetFileName(mdf.Filepath));
                     }
 
-                    if (AutoSort && !string.IsNullOrEmpty(DestinationDirectory))
+                    if (SortBy != DatePathType.None && !string.IsNullOrEmpty(DestinationDirectory))
                     {
                         if (hasCreationDate)
                         {
-                            if (mdf.MoveFileToDatePath(DestinationDirectory))
+                            if (mdf.MoveFileToDatePath(DestinationDirectory, SortBy))
                             {
                                 fi.Filepath = mdf.Filepath;
                                 OnProgressReport("   AutoSorted to: " + Path.GetDirectoryName(mdf.Filepath));

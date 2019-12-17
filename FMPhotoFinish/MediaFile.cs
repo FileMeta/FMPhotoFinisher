@@ -18,6 +18,14 @@ namespace FMPhotoFinish
         Audio = 3   // .m4a .mp3 .wav .wma
     }
 
+    enum DatePathType
+    {
+        None = 0,   // No sorting
+        YMD = 1,    // Year/Month/Day directory sorting
+        YM = 2,     // Year/Month directory sorting
+        Y = 3       // Year directory sorting
+    }
+
     /// <summary>
     /// Performs operations on a media file such as metadata changes, rotation, recoding, etc.
     /// </summary>
@@ -636,8 +644,9 @@ namespace FMPhotoFinish
         /// Moves the file to a path based on its creation date.
         /// </summary>
         /// <returns>True if successful. False if a date has not been set or if there is a file by the name of one of the directories in the path.</returns>
-        public bool MoveFileToDatePath(string dstRoot)
+        public bool MoveFileToDatePath(string dstRoot, DatePathType datePathType)
         {
+            if (datePathType == DatePathType.None) return true; // Do nothing but no error
             if (!m_creationDate.HasValue) return false;
 
             // Get a local dateTime for the file
@@ -647,8 +656,10 @@ namespace FMPhotoFinish
             // This part deliberately uses cultural-sensitive encoding so a system configured for French will use French month and day names.
             // It also uses Path.Combine for forward and backslash compatibility with non-Windows systems (though there are other dependencies in this app)
             string dir = Path.Combine(dstRoot, dt.ToString("yyyy"));
-            dir = Path.Combine(dir, dt.ToString("MM MMMM"));
-            dir = Path.Combine(dir, dt.ToString("dd~ddd"));
+            if (datePathType == DatePathType.YM || datePathType == DatePathType.YMD)
+                dir = Path.Combine(dir, dt.ToString("MM MMMM"));
+            if (datePathType == DatePathType.YMD)
+                dir = Path.Combine(dir, dt.ToString("dd~ddd"));
 
             // Create the directory (this will handle the whole path if necessary)
             // Succeeds with no error if the directory already exists

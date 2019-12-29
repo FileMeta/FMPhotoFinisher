@@ -13,7 +13,7 @@ namespace FMPhotoFinish
     enum MediaType
     {
         Unsupported = 0, // Unsupported type
-        Image = 1,  // .jpg .jpeg
+        Image = 1,  // .jpg .jpeg .heic
         Video = 2,  // .mp4 .avi .mov .mpg .mpeg
         Audio = 3   // .m4a .mp3 .wav .wma
     }
@@ -58,6 +58,7 @@ namespace FMPhotoFinish
         {
             {c_jpgExt, MediaType.Image},
             {".jpeg", MediaType.Image},
+            {".heic", MediaType.Image},
             {c_mp4Ext, MediaType.Video},
             {".avi", MediaType.Video},
             {".mov", MediaType.Video},
@@ -572,7 +573,7 @@ namespace FMPhotoFinish
         }
 
         /// <summary>
-        /// Change the filename to be based on the date the photo was taken plus subject and title metadata
+        /// Change the filename to be based on the date the photo was taken plus subject, title and keywords metadata
         /// </summary>
         /// <returns>True if the name was changed. False if the name was not changed either because it already
         /// matches the metadata or because the photo has no DateTaken metadata.</returns>
@@ -588,8 +589,9 @@ namespace FMPhotoFinish
         /// numeric extension like this: "2019-01-15_142022_Pic (01).jpg.
         /// </para>
         /// </remarks>
-        public bool SetMetadataName()
+        public bool MetadataToFilename()
         {
+            // TODO: Ensure resulting name doesn't exceed OS Max filename limits
             if (!m_creationDate.HasValue) return false;
 
             // Get a local dateTime for the file
@@ -638,6 +640,56 @@ namespace FMPhotoFinish
             m_filepath = dstPath;
 
             return true;
+        }
+
+
+        static readonly Regex s_rxDateNumericPrefix = new Regex(@"^([0-9\.,-_]+)");
+
+        // DCF File Formats. See: https://www.exif.org/dcf.PDF (trailing characters, outside the selection parentheses, are not part of the prefix - they just assist the match)
+        static readonly Regex s_rxDcfPrefix = new Regex(@"^([0-9A-Z_]{4}[0-9]{4})[^0-9A-Z_]");
+
+        /// <summary>
+        /// Update the subject, title, and keywords metadata from the filename.
+        /// </summary>
+        /// <returns>True if recognized metadata in the filename. Else, false.</returns>
+        /// <remarks>
+        /// <para>Skips date, numeric, or DCF* prefix. Assumes that the next alphanumeric
+        /// text is the subject. Text that follows a hyphen with spaces around it is the
+        /// title. Text following a hash sign is a keyword.
+        /// </para>
+        /// <para>Examples: "2019-12-17_154523 Subject - Title #Keyword.jpg" 
+        /// </para>
+        /// <para>Not all components (prefix, subject, title, keyword) have to be present.
+        /// Any one that is found will be used.
+        /// </para>
+        /// <para>Existing metadata will NOT be overwritten, appended to, or changed.
+        /// </para>
+        /// <para>*DCF is the Design rule for Camera File System and indicates filenames that are
+        /// exactly eight characters long, with a three-character extension, and that match a
+        /// particular numbering pattern. Files that originated on a camera and were subsequently
+        /// annotated with subject and/or title frequently have the original filename as a prefix.
+        /// </para>
+        /// </remarks>
+        private static bool MetadataFromFilename(string filename)
+        {
+            int i = 0;
+
+            // Skip prefix
+            {
+                var m = s_rxDateNumericPrefix.Match(filename);
+                if (!m.Success)
+                    m = s_rxDcfPrefix.Match(filename);
+                if (m.Success)
+                {
+                    i = m.Groups[0].Length;
+                }
+            }
+
+            // Skip whitespace
+            while (i < filename.Length && char.IsWhiteSpace(filename, i)) ++i;
+
+            // Incomplete - work will be finished later. But this function is not yet called so we're OK.
+            throw new NotImplementedException();
         }
 
         /// <summary>
@@ -878,15 +930,19 @@ namespace FMPhotoFinish
 
             if (m_mediaType == MediaType.Image)
             {
-                Debug.Assert(ext.Equals(".jpeg", StringComparison.OrdinalIgnoreCase));
-                ChangeExtensionTo(c_jpgExt);
-                return true;
+                if (ext.Equals(".jpeg", StringComparison.OrdinalIgnoreCase))
+                {
+                    ChangeExtensionTo(c_jpgExt);
+                    return true;
+                }
+
+                return TranscodeImageToJpeg(reporter);
             }
 
             if (m_mediaType != MediaType.Audio && m_mediaType != MediaType.Video)
                 return false;
 
-            return Transcode(reporter);
+            return TranscodeUsingFFmpeg(reporter);
         }
 
         public void SetDate(DateTag date)
@@ -1227,7 +1283,7 @@ namespace FMPhotoFinish
 
         const string c_FFMpeg = "FFMpeg.exe";
                
-        bool Transcode(ProgressReporter reporter)
+        bool TranscodeUsingFFmpeg(ProgressReporter reporter)
         {
             // If inbound file does not have a duration, it's not a transcodeable media file
             if (m_psDuration == null)
@@ -1342,6 +1398,28 @@ namespace FMPhotoFinish
             }
 
             return result;
+        }
+
+        bool TranscodeImageToJpeg(ProgressReporter reporter)
+        {
+            // Attempt to convert to .jpg (typically the incoming is .heic)
+            string newPath = Path.ChangeExtension(m_filepath, PreferredFormat);
+            MakeFilepathUnique(ref newPath);
+            try
+            {
+                JpegConverter.ConvertToJpeg(m_filepath, newPath);
+            }
+            catch (Exception err)
+            {
+                reporter.Invoke($"Failed to convert '{m_filepath}' to JPEG: {err.Message}");
+                File.Delete(newPath);
+                return false;
+            }
+
+            File.Delete(m_filepath);
+            m_filepath = newPath;
+            Orientation = 1;    // Orientation is updated with the transcode
+            return true;
         }
 
         string GetAudioQualitySettingFromSourceBitrate()

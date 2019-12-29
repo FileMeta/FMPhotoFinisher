@@ -416,12 +416,6 @@ namespace FMPhotoFinish
                         OnProgressReport($"   Timezone: {Format(mdf.Timezone)} from {mdf.TimezoneSource}.");
                     }
 
-                    if (AutoRotate && mdf.Orientation != 1)
-                    {
-                        OnProgressReport("   Autorotate");
-                        mdf.RotateToVertical();
-                    }
-
                     if (Transcode && !mdf.IsPreferredFormat)
                     {
                         OnProgressReport($"   Transcode to: {mdf.PreferredFormat} ({mdf.Duration.ToString(@"hh\:mm\:ss")})");
@@ -434,6 +428,12 @@ namespace FMPhotoFinish
                         {
                             OnProgressReport("      Transcode failed; original format retained.");
                         }
+                    }
+
+                    if (AutoRotate && mdf.Orientation != 1)
+                    {
+                        OnProgressReport("   Autorotate");
+                        mdf.RotateToVertical();
                     }
 
                     if (SetDateTo != null)
@@ -506,7 +506,7 @@ namespace FMPhotoFinish
                         OnProgressReport("   Metadata updated.");
                     }
 
-                    if (SetMetadataNames && mdf.SetMetadataName())
+                    if (SetMetadataNames && mdf.MetadataToFilename())
                     {
                         fi.Filepath = mdf.Filepath;
                         OnProgressReport("   Rename to: " + Path.GetFileName(mdf.Filepath));

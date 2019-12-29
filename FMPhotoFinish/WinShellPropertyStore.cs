@@ -3,9 +3,9 @@
 name: WinShellPropertyStore.cs
 description: C# Wrapper for Windows Property System
 url: https://github.com/FileMeta/WinShellPropertyStore/raw/master/WinShellPropertyStore.cs
-version: 1.9
+version: 1.10
 keywords: CodeBit
-dateModified: 2019-05-28
+dateModified: 2019-12-28
 license: http://unlicense.org
 dependsOn: https://github.com/FileMeta/WinShellPropertyStore/raw/master/PropVariant.cs https://github.com/FileMeta/WinShellPropertyStore/raw/master/PropertyKey.cs
 # Metadata in MicroYaml format. See http://filemeta.org and http://schema.org
@@ -163,7 +163,7 @@ namespace WinShell
                 // Callers should still take care to interpret the time as local to where the photo was taken
                 // and not local to where the computer is at present.
                 if (value != null
-                    && ((string.Equals(m_contentType, "image/jpeg")
+                    && (((string.Equals(m_contentType, "image/jpeg") || string.Equals(m_contentType, "image/heic"))
                         && (key.Equals(s_pkItemDate) || key.Equals(s_pkDateTaken)))
                     || (string.Equals(m_contentType, "video/avi")
                         && (key.Equals(s_pkItemDate) || key.Equals(s_pkDateEncoded)))))

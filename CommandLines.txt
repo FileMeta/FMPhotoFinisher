@@ -8,3 +8,4 @@ Process Disney PhotoPass:
 DeDuplicate Test
 -s "E:\SampleData\PhotoFinisherUnitTest" -d "E:\FMPhotoFinisher Test Output" -w -allTheWay -deDuplicate
 
+-st "\\akershus\archive\Audio\Olympus Mini Recorder" -d \\akershus\archive\Julie\Test -determineDate saveOriginalFn -tag OlympusRecorder -metaFileNames -sort -w

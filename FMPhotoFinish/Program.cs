@@ -131,17 +131,26 @@ Operations:
                    prefix thereby having them show in order with the
                    associated photos.
 
-  -metaFileNames   Names the photos according to the date they were taken
-                   plus subject and title metadata. If the dateTaken metadata
-                   is not present, does nothing even if subject and title are
-                   present. The new filename pattern is:
-                       yyyy-mm-dd_hhmmss <subject> - <title>.jpg
-                   For example:
-                       2019-01-15_142022 Mirror Lake - John Fishing.jpg
-                   If the title is not present, no dash or title will appear.
-                   If the subject is not present, a dash and the title will
-                   appear. If neither is present, the word, ""Pic"", will
-                   substitute.
+  -filenameFromMetadata
+                   Names the files according to the date the media was
+                   captured (e.g. photo was taken) plus subject and title
+                   metadata. If date metadata is not present, does nothing
+                   even if subject and title are present. See the Metadata
+                   Bearing Filename Pattern below.
+
+  -metadataFromFilename
+                   Set subject, title, and keywords from filename contents.
+                   Subject and title will only be set if there they don't
+                   have existing values. Keywords will be added if matching
+                   values don't already exist. See the Metadata Bearing
+                   Filename Pattern below.
+
+  -metadataFromFilenameOverwrite
+                   Set subject, title, and keywords from filename contents.
+                   New values will overwrite any existing subject and title
+                   values. Keywords will be added if matching values don't
+                   already exist. See teh Metadata Bearing Filename Pattern
+                   below.
 
   -saveOriginalFn  Save the original filename in a custom metaTag stored
                    in the comments property. If the property already exists,
@@ -196,8 +205,8 @@ Operations:
                    repeated to add multiple tags.
 
   -deduplicate     Remove duplicate media files. When copying, (using the
-                   -d argument) then duplicates are simply not copied.
-                   If in-place or moving (using the -move argument) then
+                   -d argument) duplicates are simply not copied.
+                   If in-place or moving (using the -move argument)
                    duplicates are deleted.
 
 Other Options:
@@ -334,6 +343,40 @@ Timezones:
   Instead, first use -setTimeZone and then -changeTimeZone. Both options
   may be used in one FMPhotoFinish operation or you can do them in two
   consecutive operations.
+
+Metadata Bearing Filename Pattern
+  -metadataFromFilename, -metadataFromFilenameOverwrite, and
+  -filenameFromMetadata use the following patterns for the filename.
+
+  <date or DCF> <subject> - <title> #<tag> (<index>).<extension>
+
+  Date or DCF is a date, number, or DCF name (Design Rule for Camera Name).
+  Subject and title are separated by space-dash-space. A # hash sign
+  precedes keywords (hashtags).
+
+  An optional index number may appear at the
+  end in parentheses. The number is used to prevent identical filenames
+  when the metadata are the same.
+
+  All components are optional. For example, the dash will only appear if
+  there is a title. The hash sign will only appear if there are keywords.
+
+  When reading metadata from the filename (-metadataFromFilename or 
+  -metadataFromFilenameOverwrite) the date or DCF name prefix is ignored.
+  However, -determineDate may use a date prefix in the process of
+  finding the best source for when the photo was taken. There may be
+  multiple hashtags following the # value.
+
+  When setting the filename (-filenameFromMetadata), the format will be:
+
+  yyyy-mm-dd_hhmmss <subject> - <title>.<extension>
+  For example: 2019-01-15_142022 Mirror Lake - John Fishing.jpg
+
+  If no title metadata is present, no dash or title will appear. If the
+  subject is not present but a title is, then the date will be followed
+  by the dash (surrounded by spaces) and the title.
+
+  For example: 2019-01-15_142022 - John Fishing.jpg
 ";
 
         const string c_logsFolder = "logs";
@@ -345,6 +388,10 @@ Timezones:
         static bool s_log;
         static bool s_listTimezones;
         static TextWriter s_logWriter;
+#if DEBUG
+        static Action<object> s_testAction;
+        static object s_testArgument;
+#endif
 
         static void Main(string[] args)
         {
@@ -545,9 +592,17 @@ Timezones:
                             photoFinisher.SetMetadataNames = false;
                             break;
 
-                        case "-metafilenames":
+                        case "-filenamefrommetadata":
                             photoFinisher.SetMetadataNames = true;
                             photoFinisher.SetOrderedNames = false;
+                            break;
+
+                        case "-metadatafromfilename":
+                            photoFinisher.MetadataFromFilename = SetMode.SetIfEmpty;
+                            break;
+
+                        case "-metadatafromfilenameoverwrite":
+                            photoFinisher.MetadataFromFilename = SetMode.SetAlways;
                             break;
 
                         case "-saveoriginalfn":
@@ -738,6 +793,23 @@ Timezones:
                             s_listTimezones = true;
                             break;
 
+#if DEBUG
+                        case "-testmetadatafromfilename":
+                            {
+                                ++i;
+                                if (i >= args.Length)
+                                {
+                                    Console.WriteLine("Expected argument for test.");
+                                    s_commandLineError = true;
+                                    break;
+                                }
+
+                                s_testAction = MediaFile.TestMetadataFromFilename;
+                                s_testArgument = args[i];
+                            }
+                            break;
+#endif
+
                         default:
                             Console.WriteLine($"Command-line syntax error: '{args[i]}' is not a recognized command.");
                             Console.WriteLine("Use '-h' for syntax help");
@@ -788,6 +860,14 @@ Timezones:
         static void PerformOperations(PhotoFinisher photoFinisher)
         {
             if (s_commandLineError) return;
+
+#if DEBUG
+            if (s_testAction != null)
+            {
+                s_testAction(s_testArgument);
+                return;
+            }
+#endif
 
             if (s_showSyntax)
             {

@@ -5,6 +5,7 @@ using System.IO;
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Linq;
 using FileMeta;
 using Interop;
 
@@ -25,6 +26,12 @@ namespace FMPhotoFinish
         YM = 2,     // Year/Month directory sorting
         Y = 3       // Year directory sorting
     }
+
+    // TODO: Refactor and cleanup for consistency
+    // Have properties for principal properties that can be read or changed (e.g. dates, keywords, subject, title)
+    // Name the fields consistently for these properties plus redundant "source" properties.
+    // When a value is set, also set m_updateMetadata
+    // Have a isDirty or needsCommit property
 
     /// <summary>
     /// Performs operations on a media file such as metadata changes, rotation, recoding, etc.
@@ -572,6 +579,8 @@ namespace FMPhotoFinish
             return false;
         }
 
+        const int c_maxFileName = 120;  // A bit less than half of Windows MAX_PATH and leaving some space for the extension
+
         /// <summary>
         /// Change the filename to be based on the date the photo was taken plus subject, title and keywords metadata
         /// </summary>
@@ -591,7 +600,6 @@ namespace FMPhotoFinish
         /// </remarks>
         public bool MetadataToFilename()
         {
-            // TODO: Ensure resulting name doesn't exceed OS Max filename limits
             if (!m_creationDate.HasValue) return false;
 
             // Get a local dateTime for the file
@@ -602,15 +610,17 @@ namespace FMPhotoFinish
 
             bool hasName = false;
 
-            if (!string.IsNullOrEmpty(m_psSubject))
+            var subject = Filenameify(m_psSubject);
+            if (!string.IsNullOrEmpty(subject))
             {
-                newName = string.Concat(newName, " ", m_psSubject);
+                newName = string.Concat(newName, " ", subject);
                 hasName = true;
             }
 
-            if (!string.IsNullOrEmpty(m_psTitle))
+            var title = Filenameify(m_psTitle);
+            if (!string.IsNullOrEmpty(title))
             {
-                newName = string.Concat(newName, " - ", m_psTitle);
+                newName = string.Concat(newName, " - ", title);
                 hasName = true;
             }
 
@@ -629,6 +639,10 @@ namespace FMPhotoFinish
                 newName = string.Concat(newName, " ", s_defaultTitle[(int)m_mediaType]);
             }
 
+            // Limit the length
+            if (newName.Length > c_maxFileName)
+                newName = newName.Substring(0, c_maxFileName);
+
             newName = string.Concat(newName, Path.GetExtension(m_filepath));
             if (string.Equals(newName, Path.GetFileName(m_filepath), StringComparison.OrdinalIgnoreCase))
                 return false;   // Filename already matches the metadata
@@ -642,14 +656,57 @@ namespace FMPhotoFinish
             return true;
         }
 
-
-        static readonly Regex s_rxDateNumericPrefix = new Regex(@"^([0-9\.,-_]+)");
+        static readonly Regex s_rxDateNumericPrefix = new Regex(@"^([0-9\.,\-_]+)");
+        static readonly char[] s_hashSplitChars = new char[] { '#', ' ', '\t', '\r', '\n' };
 
         // DCF File Formats. See: https://www.exif.org/dcf.PDF (trailing characters, outside the selection parentheses, are not part of the prefix - they just assist the match)
         static readonly Regex s_rxDcfPrefix = new Regex(@"^([0-9A-Z_]{4}[0-9]{4})[^0-9A-Z_]");
 
         /// <summary>
-        /// Update the subject, title, and keywords metadata from the filename.
+        /// Update subject, title, and keywords (hashtags) metadata from the filename
+        /// </summary>
+        /// <param name="overwrite">True if existing metadata should be overwritten.</param>
+        /// <returns>True if metadata was updated. False if nothign found or existign metadata
+        /// is left intact.</returns>
+        /// <remarks>
+        /// <para>Existign metadata (subject, title, or keywords) will not be overwritten unless
+        /// <paramref name="overwrite"/> is true.</para>
+        /// </remarks>
+        public bool MetadataFromFilename(bool overwrite)
+        {
+            string subject;
+            string title;
+            string[] keywords;
+            if (!MetadataFromFilename(m_fsOriginalFilename, out subject, out title, out keywords))
+                return false;
+
+            bool update = false;
+            if (subject != null && (overwrite || string.IsNullOrEmpty(m_psSubject)))
+            {
+                m_psSubject = subject;
+                update = true;
+            }
+
+            if (title != null && (overwrite || string.IsNullOrEmpty(m_psTitle)))
+            {
+                m_psTitle = title;
+                update = true;
+            }
+
+            if (keywords != null)
+            {
+                if (AddKeywords(keywords))
+                    update = true;
+            }
+
+            if (update)
+                m_updateMetadata = true;
+
+            return update;
+        }
+
+        /// <summary>
+        /// Parse subject, title, and keywords (hashtags) metadata from a filename.
         /// </summary>
         /// <returns>True if recognized metadata in the filename. Else, false.</returns>
         /// <remarks>
@@ -657,12 +714,16 @@ namespace FMPhotoFinish
         /// text is the subject. Text that follows a hyphen with spaces around it is the
         /// title. Text following a hash sign is a keyword.
         /// </para>
-        /// <para>Examples: "2019-12-17_154523 Subject - Title #Keyword.jpg" 
+        /// <para>A numeric index in parentheses at the end of the filename (before the
+        /// extension) is ignored. Such indices are used to prevent duplicate filenames.
+        /// </para>
+        /// <para>Example: "2019-12-17_154523 Subject - Title #Keyword (123).jpg" 
         /// </para>
         /// <para>Not all components (prefix, subject, title, keyword) have to be present.
         /// Any one that is found will be used.
         /// </para>
-        /// <para>Existing metadata will NOT be overwritten, appended to, or changed.
+        /// <para>Date is not extracted in this function becasue that is handled by
+        /// <see cref="TryParseDateTimeFromFilenameEx(string, DateTime, out DateTime)"/>.
         /// </para>
         /// <para>*DCF is the Design rule for Camera File System and indicates filenames that are
         /// exactly eight characters long, with a three-character extension, and that match a
@@ -670,9 +731,13 @@ namespace FMPhotoFinish
         /// annotated with subject and/or title frequently have the original filename as a prefix.
         /// </para>
         /// </remarks>
-        private static bool MetadataFromFilename(string filename)
+        private static bool MetadataFromFilename(string filename, out string subject, out string title, out string[] hashtags)
         {
-            int i = 0;
+            // Strip extension
+            filename = Path.GetFileNameWithoutExtension(filename);
+
+            int start = 0;
+            int end = filename.Length;
 
             // Skip prefix
             {
@@ -681,15 +746,63 @@ namespace FMPhotoFinish
                     m = s_rxDcfPrefix.Match(filename);
                 if (m.Success)
                 {
-                    i = m.Groups[0].Length;
+                    start = m.Groups[0].Length;
                 }
             }
 
-            // Skip whitespace
-            while (i < filename.Length && char.IsWhiteSpace(filename, i)) ++i;
+            // Skip numeric suffix
+            {
+                int e = end;
+                if (e > 0 && filename[e-1] == ')')
+                {
+                    --e;
+                    while (e > 0 && char.IsDigit(filename[e - 1])) --e;
+                    if (e > 0 && filename[e - 1] == '(')
+                    {
+                        end = e - 1;
+                    }
+                }
+            }
 
-            // Incomplete - work will be finished later. But this function is not yet called so we're OK.
-            throw new NotImplementedException();
+            // Look for a hyphen, surrounded by spaces
+            int hyphen = filename.IndexOf(" - ", start, end - start);
+
+            // Look for a hashtag
+            int hash = filename.IndexOf('#', start, end-start);
+            if (hash >= 0 && hash < hyphen) hyphen = -1;
+
+            // Set the subject (if found)
+            {
+                int subjectEnd = (hyphen > start) ? hyphen : (hash > start) ? hash : end;
+                var temp = filename.Substring(start, subjectEnd - start).Trim();
+                subject = temp.Length > 0 ? temp : null;
+            }
+
+            // Set the title (if found)
+            if (hyphen > start)
+            {
+                int titleStart = hyphen + 3;
+                int titleEnd = (hash > titleStart) ? hash : end;
+                var temp = filename.Substring(titleStart, titleEnd - titleStart).Trim();
+                title = temp.Length > 0 ? temp : null;
+            }
+            else
+            {
+                title = null;
+            }
+
+            // Set the hashtags (if any)
+            if (hash > 0)
+            {
+                string[] temp = filename.Substring(hash + 1, end - hash - 1).Split(s_hashSplitChars, StringSplitOptions.RemoveEmptyEntries);
+                hashtags = (temp.Length > 0) ? temp : null;
+            }
+            else
+            {
+                hashtags = null;
+            }
+
+            return subject != null || title != null || hashtags != null;
         }
 
         /// <summary>
@@ -1199,6 +1312,10 @@ namespace FMPhotoFinish
                         ps.SetValue(PropertyKeys.Model, m_model);
                     if (m_psKeywords != null && m_psKeywords.Length > 0)
                         ps.SetValue(PropertyKeys.Keywords, m_psKeywords);
+                    if (!string.IsNullOrEmpty(m_psSubject))
+                        ps.SetValue(PropertyKeys.Subject, m_psSubject);
+                    if (!string.IsNullOrEmpty(m_psTitle))
+                        ps.SetValue(PropertyKeys.Title, m_psTitle);
 
                     if (metaTagSet.Count > 0)
                     {
@@ -1481,18 +1598,47 @@ namespace FMPhotoFinish
                     if (!prevIsWhitespace) bldr.Append('-');
                     prevIsWhitespace = true;
                 }
-                else
+                else if (char.IsLetterOrDigit(c))
                 {
+                    bldr.Append(c);
                     prevIsWhitespace = false;
-                    if (char.IsLetterOrDigit(c)) bldr.Append(c);
                 }
             }
+            if (prevIsWhitespace) bldr.Length = bldr.Length - 1;
             return bldr.ToString();
         }
 
-#endregion // Private Members
+        /// <summary>
+        /// Remove all invalid filename characters and trim leading and trailing whitespace.
+        /// </summary>
+        /// <param name="value">The string to process</param>
+        /// <returns>The updated string.</returns>
+        static string Filenameify(string value)
+        {
+            var removeChars = Path.GetInvalidFileNameChars();
 
-#region Init and Shutdown
+            var bldr = new StringBuilder(value.Length);
+            bool prevIsWhitespace = true;
+            foreach (char c in value)
+            {
+                if (char.IsWhiteSpace(c))
+                {
+                    if (!prevIsWhitespace) bldr.Append(' ');
+                    prevIsWhitespace = true;
+                }
+                else if (!removeChars.Contains(c))
+                {
+                    bldr.Append(c);
+                    prevIsWhitespace = false;
+                }
+            }
+            if (prevIsWhitespace) bldr.Length = bldr.Length - 1;
+            return bldr.ToString();
+        }
+
+        #endregion // Private Members
+
+        #region Init and Shutdown
 
         static ExifToolWrapper.ExifTool s_exifTool;
         static readonly StaticDisposer s_psDisposer = new StaticDisposer();
@@ -1515,7 +1661,35 @@ namespace FMPhotoFinish
             }
         }
 
-#endregion
+        #endregion
+
+        #region Unit Tests
+
+        static public void TestMetadataFromFilename(object argument)
+        {
+            string filename = argument as string;
+            if (filename == null) return;
+
+            string subject;
+            string title;
+            string[] hashtags;
+            MetadataFromFilename(filename, out subject, out title, out hashtags);
+
+            Console.WriteLine($"Subject: {subject ?? ("(null)")}");
+            Console.WriteLine($"Title: {title ?? ("(null)")}");
+            Console.WriteLine("Hashtags: ");
+            if (hashtags != null)
+            {
+                Console.WriteLine(string.Join(", ", hashtags));
+            }
+            else
+            {
+                Console.WriteLine("(null)");
+            }
+        }
+
+        #endregion Unit Tests
+
     }
 
     /// <summary>

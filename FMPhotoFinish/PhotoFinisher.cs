@@ -9,6 +9,12 @@ using System.Text.RegularExpressions;
 
 namespace FMPhotoFinish
 {
+    enum SetMode : int
+    {
+        DoNothing = 0,  // Don't write any value
+        SetIfEmpty = 1, // Set if the value is empty
+        SetAlways = 2   // Overwrite any existing value
+    }
     class PhotoFinisher
     {
         const string c_dcimDirectory = "DCIM";
@@ -75,6 +81,11 @@ namespace FMPhotoFinish
         /// Change the filename to one based on the date the photo was taken plus subject and title metadata.
         /// </summary>
         public bool SetMetadataNames { get; set; }
+
+        /// <summary>
+        /// Update subject, title, and metadata keywords from the filename
+        /// </summary>
+        public SetMode MetadataFromFilename { get; set; }
 
         /// <summary>
         /// Auto-rotate images to the vertical position.
@@ -348,17 +359,13 @@ namespace FMPhotoFinish
 
         void ProcessMediaFiles()
         {
-            // We index through the files because we may need the index to match metadata
-            // on a preceding or succeeding file
-            int count = m_selectedFiles.Count;
-            for (int i = 0; i < count; ++i)
+            foreach(var fi in m_selectedFiles)
             {
-                var fi = m_selectedFiles[i];
-                ProcessMediaFile(fi, i);
+                ProcessMediaFile(fi);
             }
         }
 
-        void ProcessMediaFile(ProcessFileInfo fi, int index)
+        void ProcessMediaFile(ProcessFileInfo fi)
         {
             OnProgressReport(Path.GetFileName(fi.Filepath));
 
@@ -491,6 +498,11 @@ namespace FMPhotoFinish
                         {
                             OnProgressReport($"   ERROR: Failed to change timezone.");
                         }
+                    }
+
+                    if (MetadataFromFilename != SetMode.DoNothing)
+                    {
+                        mdf.MetadataFromFilename(MetadataFromFilename == SetMode.SetAlways);
                     }
 
                     if (AddKeywords.Count > 0)

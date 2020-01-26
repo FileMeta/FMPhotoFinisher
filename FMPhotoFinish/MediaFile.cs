@@ -191,28 +191,32 @@ namespace FMPhotoFinish
         /// </remarks>
         public static bool TryParseDateTimeFromFilename(string filename, out DateTime result)
         {
+            filename = Path.GetFileNameWithoutExtension(filename);
             result = DateTime.MinValue;
             var sb = new StringBuilder();
             foreach (char c in filename)
             {
                 if (char.IsDigit(c)) sb.Append(c);
-                if (sb.Length >= 17) break;
+                else if (c != '-' && c != '.' && c != '_' && c != 'T') break;
+                if (sb.Length >= 14) break;
             }
             var digits = sb.ToString();
-            if (digits.Length < 14) return false;
+            if (digits.Length != 8 && digits.Length != 14) return false;
 
             int year = int.Parse(digits.Substring(0, 4));
             int month = int.Parse(digits.Substring(4, 2));
             int day = int.Parse(digits.Substring(6, 2));
-            int hour = int.Parse(digits.Substring(8, 2));
-            int minute = int.Parse(digits.Substring(10, 2));
-            int second = int.Parse(digits.Substring(12, 2));
-            int millisecond = 0;
-            if (digits.Length > 14)
+
+            int hour = 0;
+            int minute = 0;
+            int second = 0;
+            if (digits.Length > 8)
             {
-                millisecond = (int)(int.Parse(digits.Substring(14))
-                    * Math.Pow(10, 17 - digits.Length));
+                hour = int.Parse(digits.Substring(8, 2));
+                minute = int.Parse(digits.Substring(10, 2));
+                second = int.Parse(digits.Substring(12, 2));
             }
+
             if (year < 1900 || year > 2200) return false;
             if (month < 1 || month > 12) return false;
             if (day < 1 || day > DateTime.DaysInMonth(year, month)) return false;
@@ -220,7 +224,7 @@ namespace FMPhotoFinish
             if (minute < 0 || minute > 59) return false;
             if (second < 0 || second > 59) return false;
 
-            result = new DateTime(year, month, day, hour, minute, second, millisecond, DateTimeKind.Local);
+            result = new DateTime(year, month, day, hour, minute, second, 0, DateTimeKind.Local);
             return true;
         }
 
@@ -1247,7 +1251,9 @@ namespace FMPhotoFinish
                 throw new ApplicationException("Cannot update metadata on unsupported media type.");
 
             // Timezone to use for conversions as values are saved.
-            var timezone = m_timezone ?? TimeZoneTag.Zero;
+            var timezone = (m_timezone != null && m_timezone.Kind == TimeZoneKind.Normal)
+                ? m_timezone
+                : new TimeZoneTag(TimeZone.CurrentTimeZone.GetUtcOffset(m_creationDate.Value), TimeZoneKind.Normal);
 
             // If audio or video, attempt to use Isom to update creationDate
             bool creationDateStoredByIsom = false;
@@ -1258,7 +1264,7 @@ namespace FMPhotoFinish
                 {
                     using (isom)
                     {
-                        // Convert to UTC (this does nothing if it is already UTC.
+                        // Convert to UTC if we have a timezone value (does nothing if it's already UTC)
                         var dt = timezone.ToUtc(m_creationDate.Value);
                         isom.CreationTime = dt;
                         isom.ModificationTime = dt;
@@ -1399,15 +1405,11 @@ namespace FMPhotoFinish
         }
 
         const string c_FFMpeg = "FFMpeg.exe";
+        const string c_audioQuality_RIFF = "-b:a 32k";
+        static readonly byte[] s_riff = new byte[] { (byte)'R', (byte)'I', (byte)'F', (byte)'F' };
                
         bool TranscodeUsingFFmpeg(ProgressReporter reporter)
         {
-            // If inbound file does not have a duration, it's not a transcodeable media file
-            if (m_psDuration == null)
-            {
-                return false;
-            }
-
             string newPath = Path.ChangeExtension(m_filepath, PreferredFormat);
             MakeFilepathUnique(ref newPath);
 
@@ -1421,10 +1423,32 @@ namespace FMPhotoFinish
                 {
                     arguments = $"-hide_banner -i \"{m_filepath}\" {c_ffmpegVideoSettings} {c_ffmpegAudioSettings} \"{newPath}\"";
                 }
-                else if (m_mediaType == MediaType.Audio)
+                else if (m_mediaType == MediaType.Audio)               
                 {
-                    // Pick quality level based on bitrate of inbound recording
-                    string audioSettings = c_ffmpegAudioSettings + " " + GetAudioQualitySettingFromSourceBitrate();
+                    string audioSettings;
+
+                    // If inbound file does not have a duration
+                    if (m_psDuration == null)
+                    {
+                        // Files from MiniRecorder on Windows phone have a .mp3 extension but are actually RIFF
+                        // files. We have a special case for detecting them.
+                        byte[] bytes = new byte[4];
+                        using (var f = new FileStream(m_filepath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                        {
+                            if (4 != f.Read(bytes, 0, 4)) return false;
+                        }
+                        if (!bytes.SequenceEqual(s_riff))
+                        {
+                            return false;   // Invalid audio file, don't transcode
+                        }
+                        audioSettings = c_ffmpegAudioSettings + " " + c_audioQuality_RIFF;
+                    }
+                    else
+                    {
+                        // Pick quality level based on bitrate of inbound recording
+                        audioSettings = c_ffmpegAudioSettings + " " + GetAudioQualitySettingFromSourceBitrate();
+                    }
+
                     Debug.WriteLine(audioSettings);
                     arguments = $"-hide_banner -i \"{m_filepath}\" {audioSettings} \"{newPath}\"";
                 }
@@ -1492,11 +1516,26 @@ namespace FMPhotoFinish
                 {
                     using (isom)
                     {
-                        Debug.Assert(m_psDuration != null); // Should have exited early if duration is null.
-                        if (isom.Duration == null
-                            || Math.Abs(m_psDuration.Value.Ticks - isom.Duration.Ticks) > (250L * 10000L)) // 1/4 second
+                        if (m_psDuration != null)
                         {
-                            result = false;
+                            if (isom.Duration == null
+                                || Math.Abs(m_psDuration.Value.Ticks - isom.Duration.Ticks) > (250L * 10000L)) // 1/4 second
+                            {
+                                result = false;
+                            }
+                        }
+                        // Original duration not available
+                        else
+                        {
+                            // Make sure the result has a duration
+                            if (isom.Duration.Ticks == 0L)
+                            {
+                                result = false;
+                            }
+                            else
+                            {
+                                m_psDuration = isom.Duration;
+                            }
                         }
                     }
                 }

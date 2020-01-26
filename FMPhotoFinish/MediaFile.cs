@@ -804,6 +804,13 @@ namespace FMPhotoFinish
                 hashtags = null;
             }
 
+            // If we have a subject but not a title, move subject into title
+            if (title == null && subject != null)
+            {
+                title = subject;
+                subject = null;
+            }
+
             return subject != null || title != null || hashtags != null;
         }
 

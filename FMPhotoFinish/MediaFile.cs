@@ -240,6 +240,7 @@ namespace FMPhotoFinish
         public static bool TryParseDateTimeFromFilenameEx(string filename, DateTime fileSystemDate, out DateTime result)
         {
             // First try the known formats (only one so far)
+            result = DateTime.MinValue;
             {
                 var match = s_dateFilename1.Match(filename);
                 if (match.Success)
@@ -254,30 +255,27 @@ namespace FMPhotoFinish
                         && month >= 1 && month <= 12
                         && day >= 1 && day <= DateTime.DaysInMonth(year, month))
                     {
-                        fileSystemDate = fileSystemDate.ToLocalTime();
-                        int hour = 0;
-                        int minute = 0;
-                        int second = 0;
-                        int millisecond = 0;
-                        // If hour, minute, and second are zeros and date matches filesystem value, then fill in the time
-                        if (hour == 0 && minute == 0 && second == 0 && millisecond == 0
-                            && year == fileSystemDate.Year
-                            && month == fileSystemDate.Month
-                            && day == fileSystemDate.Day)
-                        {
-                            hour = fileSystemDate.Hour;
-                            minute = fileSystemDate.Minute;
-                            second = fileSystemDate.Second;
-                            millisecond = fileSystemDate.Millisecond;
-                        }
-
-                        result = new DateTime(year, month, day, hour, minute, second, millisecond, DateTimeKind.Local);
-                        return true;
+                        result = new DateTime(year, month, day, 0, 0, 0, DateTimeKind.Local);
                     }
                 }
             }
+            if (result == DateTime.MinValue)
+            {
+                if (!TryParseDateTimeFromFilename(filename, out result))
+                {
+                    return false;
+                }
+            }
 
-            return TryParseDateTimeFromFilename(filename, out result);
+            // If the resulting date matches fileSystemDate but there is no time, fill in the time component
+            var testDate = fileSystemDate.ToLocalTime();
+            if (result.Hour == 0 && result.Minute == 0 && result.Second == 0 && result.Millisecond == 0
+                && result.Year == testDate.Year && result.Month == testDate.Month && result.Day == testDate.Day)
+            {
+                result = fileSystemDate;
+            }
+
+            return true;
         }
 
         /// Number of seconds of tolerance when comparing for hours offset

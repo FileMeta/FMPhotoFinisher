@@ -184,7 +184,7 @@ namespace FMPhotoFinish
         /// <summary>
         /// Select files for processing using directory path with wildcards.
         /// </summary>
-        /// <param name="path">The path (including possible wildcards) of files to sleect.</param>
+        /// <param name="path">The path (including possible wildcards) of files to select.</param>
         /// <param name="recursive">If true, traverse subdirectories for matching files as well.</param>
         /// <remarks>
         /// <para>Wildcards may only appear in the filename, not in the earlier parts of the path.

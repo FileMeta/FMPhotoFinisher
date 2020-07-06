@@ -11,3 +11,5 @@ DeDuplicate Test
 -st "\\akershus\archive\Audio\Olympus Mini Recorder" -d \\akershus\archive\Julie\Test -determineDate saveOriginalFn -tag OlympusRecorder -metaFileNames -sort -w
 
 -s \\akershus\archive\Julie\Raw -d "E:\FMPhotoFinisher Test Output" -alltheway -metadatafromfilename -w
+
+-s \\akershus\archive\Julie\Raw -d "\\akershus\archive\Julie\Audio-Video-Photos" -sortby ym -alltheway -metadatafromfilename -tag JulieBlueWinPhone -w

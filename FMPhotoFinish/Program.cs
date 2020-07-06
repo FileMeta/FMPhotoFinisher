@@ -114,7 +114,8 @@ Destination:
 
   -sortby <patt>   Auto-sort the transferred files into a directory tree
                    rooted in the folder specified by -d. Supported patterns
-                   are ymd (year/month/day), ym (year/month), y (year).
+                   are y (year), ym (year/month), ymd (year/month/day),
+                   ymds (year/month/day subject).
 
   -sort            Equivalent to -sortby ymd
 
@@ -566,6 +567,9 @@ Metadata Bearing Filename Pattern
                                         break;
                                     case "ymd":
                                         photoFinisher.SortBy = DatePathType.YMD;
+                                        break;
+                                    case "ymds":
+                                        photoFinisher.SortBy = DatePathType.YMDS;
                                         break;
                                     default:
                                         Console.WriteLine($"Unexpected value for -sortby: {args[i]}.");

@@ -22,9 +22,10 @@ namespace FMPhotoFinish
     enum DatePathType
     {
         None = 0,   // No sorting
-        YMD = 1,    // Year/Month/Day directory sorting
+        Y = 1,      // Year directory sorting
         YM = 2,     // Year/Month directory sorting
-        Y = 3       // Year directory sorting
+        YMD = 3,    // Year/Month/Day directory sorting
+        YMDS = 4    // Year/Month/Day Subject
     }
 
     // TODO: Refactor and cleanup for consistency
@@ -388,6 +389,10 @@ namespace FMPhotoFinish
                 m_psTitle = propstore.GetValue(PropertyKeys.Title) as string;
                 m_psKeywords = propstore.GetValue(PropertyKeys.Keywords) as string[];
 
+                // On JPEG files, Windows property system will fill in the subject with the title if subject is not present. Compensate for that.
+                if (m_mediaType == MediaType.Image && string.Equals(m_psSubject, m_psTitle, StringComparison.Ordinal))
+                    m_psSubject = null;
+
                 if (m_psSubject != null)
                     m_psSubject = m_psSubject.Trim();
 
@@ -396,10 +401,6 @@ namespace FMPhotoFinish
 
                 if (m_psKeywords == null)
                     m_psKeywords = new string[0];
-
-                // Windows property system will fill in the subject with the title if subject is not present. Compensate for that.
-                if (string.Equals(m_psSubject, m_psTitle, StringComparison.Ordinal))
-                    m_psSubject = null; 
 
                 // Comment may be used to store custom metadata
                 var metaTagSet = new MetaTagSet();
@@ -830,10 +831,15 @@ namespace FMPhotoFinish
             // This part deliberately uses cultural-sensitive encoding so a system configured for French will use French month and day names.
             // It also uses Path.Combine for forward and backslash compatibility with non-Windows systems (though there are other dependencies in this app)
             string dir = Path.Combine(dstRoot, dt.ToString("yyyy"));
-            if (datePathType == DatePathType.YM || datePathType == DatePathType.YMD)
+            if (datePathType == DatePathType.YM || datePathType == DatePathType.YMD
+                || datePathType == DatePathType.YMDS)
                 dir = Path.Combine(dir, dt.ToString("MM MMMM"));
-            if (datePathType == DatePathType.YMD)
+            if (datePathType == DatePathType.YMD || datePathType == DatePathType.YMDS)
                 dir = Path.Combine(dir, dt.ToString("dd~ddd"));
+            if (datePathType == DatePathType.YMDS && !string.IsNullOrEmpty(m_psSubject))
+            {
+                dir = string.Concat(dir, " ", m_psSubject);
+            }
 
             // Create the directory (this will handle the whole path if necessary)
             // Succeeds with no error if the directory already exists

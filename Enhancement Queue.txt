@@ -1,0 +1,6 @@
+FMPhotoFinish Enhancements
+* Allow multiple select statements (-s or -st) on the command-line
+* Show progress (e.g. 5 of 23)
+* If -s and -d are the same (even for a subset of files) handle it properly
+    If -move, don't bother renaming
+    If copy then handle rename appropriately

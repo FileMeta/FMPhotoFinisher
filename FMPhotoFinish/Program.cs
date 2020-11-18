@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Text;
+using FileMeta;
 
 //Next Steps
 /* Done:
@@ -122,6 +123,14 @@ Destination:
   -move            Move the files from the source to the destination. If this
                    parameter is not included then the unprocessed original
                    files are left at the source.
+
+Standalone Operations:
+
+  -authOneDrive <sourceName>
+                   Interactively log in to a Microsoft OneDrive account and
+                   authorize for access to the photos stored there. Store the
+                   credentials in the local computer's secure credential
+                   storage under the specified sourceName.  
 
 Operations:
   -autorot         Using the 'orientation' metadata flag, auto rotate images
@@ -389,6 +398,7 @@ Metadata Bearing Filename Pattern
         static bool s_log;
         static bool s_listTimezones;
         static TextWriter s_logWriter;
+        static string s_authOneDriveSourceName;
 #if DEBUG
         static Action<object> s_testAction;
         static object s_testArgument;
@@ -454,31 +464,11 @@ Metadata Bearing Filename Pattern
                             break;
 
                         case "-s":
-                            {
-                                ++i;
-                                if (i >= args.Length)
-                                {
-                                    Console.WriteLine($"Expected value for -s command-line argument.");
-                                    s_commandLineError = true;
-                                    break;
-                                }
-
-                                photoFinisher.SelectFiles(args[i], false);
-                            }
+                            photoFinisher.SelectFiles(NextArgument(args, ref i, "-s"), false);
                             break;
 
                         case "-st":
-                            {
-                                ++i;
-                                if (i >= args.Length)
-                                {
-                                    Console.WriteLine($"Expected value for -st command-line argument.");
-                                    s_commandLineError = true;
-                                    break;
-                                }
-
-                                photoFinisher.SelectFiles(args[i], true);
-                            }
+                            photoFinisher.SelectFiles(NextArgument(args, ref i, "-st"), true);
                             break;
 
                         case "-sdcim":
@@ -494,28 +484,8 @@ Metadata Bearing Filename Pattern
                             break;
 
                         case "-selectafter":
-                            {
-                                ++i;
-                                if (i >= args.Length)
-                                {
-                                    Console.WriteLine($"Expected value for -selectAfter command-line argument.");
-                                    s_commandLineError = true;
-                                    break;
-                                }
-
-                                FileMeta.DateTag dt;
-                                if (!FileMeta.DateTag.TryParse(args[i], out dt))
-                                {
-                                    Console.WriteLine($"Invalid value for -setDate '{args[i]}'.");
-                                    s_commandLineError = true;
-                                    break;
-                                }
-
-                                // Default to the local timezone if needed
-                                dt = dt.ResolveTimeZone(TimeZoneInfo.Local);
-
-                                photoFinisher.SelectAfter = dt.Date;
-                            }
+                            photoFinisher.SelectAfter = NextArgumentAsDate(args, ref i, "-selectAfter")
+                                .ResolveTimeZone(TimeZoneInfo.Local).Date;
                             break;
 
                         case "-selectincremental":
@@ -524,15 +494,7 @@ Metadata Bearing Filename Pattern
 
                         case "-d":
                             {
-                                ++i;
-                                if (i >= args.Length)
-                                {
-                                    Console.WriteLine("Expected value for -d command-line argument.");
-                                    s_commandLineError = true;
-                                    break;
-                                }
-
-                                string dst = args[i];
+                                string dst = NextArgument(args, ref i, "-d");
                                 if (!Directory.Exists(dst))
                                 {
                                     Console.WriteLine($"Destination folder '{dst}' does not exist.");
@@ -548,34 +510,24 @@ Metadata Bearing Filename Pattern
                             break;
 
                         case "-sortby":
+                            switch (NextArgument(args, ref i, "-sortby").ToLowerInvariant())
                             {
-                                ++i;
-                                if (i >= args.Length)
-                                {
-                                    Console.WriteLine("Expected value for -sortby command-line argument.");
+                                case "y":
+                                    photoFinisher.SortBy = DatePathType.Y;
+                                    break;
+                                case "ym":
+                                    photoFinisher.SortBy = DatePathType.YM;
+                                    break;
+                                case "ymd":
+                                    photoFinisher.SortBy = DatePathType.YMD;
+                                    break;
+                                case "ymds":
+                                    photoFinisher.SortBy = DatePathType.YMDS;
+                                    break;
+                                default:
+                                    Console.WriteLine($"Unexpected value for -sortby: {args[i]}.");
                                     s_commandLineError = true;
                                     break;
-                                }
-
-                                switch (args[i].ToLowerInvariant())
-                                {
-                                    case "y":
-                                        photoFinisher.SortBy = DatePathType.Y;
-                                        break;
-                                    case "ym":
-                                        photoFinisher.SortBy = DatePathType.YM;
-                                        break;
-                                    case "ymd":
-                                        photoFinisher.SortBy = DatePathType.YMD;
-                                        break;
-                                    case "ymds":
-                                        photoFinisher.SortBy = DatePathType.YMDS;
-                                        break;
-                                    default:
-                                        Console.WriteLine($"Unexpected value for -sortby: {args[i]}.");
-                                        s_commandLineError = true;
-                                        break;
-                                }
                             }
                             break;
 
@@ -623,14 +575,7 @@ Metadata Bearing Filename Pattern
                             break;
 
                         case "-tag":
-                            ++i;
-                            if (i >= args.Length)
-                            {
-                                Console.WriteLine($"Expected value for -tag command-line argument.");
-                                s_commandLineError = true;
-                                break;
-                            }
-                            photoFinisher.AddKeywords.Add(args[i]);
+                            photoFinisher.AddKeywords.Add(NextArgument(args, ref i, "-tag"));
                             break;
 
                         case "-determinedate":
@@ -652,28 +597,8 @@ Metadata Bearing Filename Pattern
                             break;
 
                         case "-setdate":
-                            {
-                                ++i;
-                                if (i >= args.Length)
-                                {
-                                    Console.WriteLine($"Expected value for -setDate command-line argument.");
-                                    s_commandLineError = true;
-                                    break;
-                                }
-
-                                FileMeta.DateTag dt;
-                                if (!FileMeta.DateTag.TryParse(args[i], out dt))
-                                {
-                                    Console.WriteLine($"Invalid value for -setDate '{args[i]}'.");
-                                    s_commandLineError = true;
-                                    break;
-                                }
-
-                                // Default to the local timezone if needed
-                                dt = dt.ResolveTimeZone(TimeZoneInfo.Local);
-
-                                photoFinisher.SetDateTo = dt;
-                            }
+                            photoFinisher.SetDateTo = NextArgumentAsDate(args, ref i, "-setdate")
+                                .ResolveTimeZone(TimeZoneInfo.Local);
                             break;
 
                         case "-shiftdate":
@@ -686,16 +611,16 @@ Metadata Bearing Filename Pattern
                                     break;
                                 }
 
+                                string timeShift = NextArgument(args, ref i, "-shiftdate");
+
                                 // If the next argument starts with a sign, then the shift amount is a simple timespan.
-                                if (args[i][0] == '+' || args[i][0] == '-')
+                                if (timeShift[0] == '+' || timeShift[0] == '-')
                                 {
-                                    string s = (args[i][0] == '+') ? args[i].Substring(1) : args[i];
+                                    string s = (timeShift[0] == '+') ? timeShift.Substring(1) : timeShift;
                                     TimeSpan ts;
                                     if (!TimeSpan.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, out ts))
                                     {
-                                        Console.WriteLine($"Invalid value for -shiftDate '{args[i]}'.");
-                                        s_commandLineError = true;
-                                        break;
+                                        throw new ArgumentException($"Invalid value for -shiftDate '{timeShift}'.");
                                     }
 
                                     photoFinisher.ShiftDateBy = ts;
@@ -704,28 +629,18 @@ Metadata Bearing Filename Pattern
                                 // Else, shift amount is the difference of two times
                                 else
                                 {
-                                    if (i+1 >= args.Length)
-                                    {
-                                        Console.WriteLine($"Expected two values for -shiftDate command-line argument.");
-                                        s_commandLineError = true;
-                                        break;
-                                    }
+                                    string secondDate = NextArgument(args, ref i, "-shiftdate second value");
 
                                     FileMeta.DateTag dtTarget;
-                                    if (!FileMeta.DateTag.TryParse(args[i], out dtTarget))
+                                    if (!FileMeta.DateTag.TryParse(timeShift, out dtTarget))
                                     {
-                                        Console.WriteLine($"Invalid value for -shiftDate '{args[i]}'.");
-                                        s_commandLineError = true;
-                                        break;
+                                        throw new ArgumentException($"Invalid value for -shiftDate '{args[i]}'.");
                                     }
 
-                                    ++i;
                                     FileMeta.DateTag dtSource;
-                                    if (!FileMeta.DateTag.TryParse(args[i], out dtSource))
+                                    if (!FileMeta.DateTag.TryParse(secondDate, out dtSource))
                                     {
-                                        Console.WriteLine($"Invalid value for -shiftDate '{args[i]}'.");
-                                        s_commandLineError = true;
-                                        break;
+                                        throw new ArgumentException($"Invalid value for -shiftDate '{args[i]}'.");
                                     }
 
                                     // Resolve timezone if it was ambiguous.
@@ -740,18 +655,11 @@ Metadata Bearing Filename Pattern
 
                         case "-settimezone":
                             {
-                                ++i;
-                                if (i >= args.Length)
-                                {
-                                    Console.WriteLine($"Expected value for -setTimezone command-line argument.");
-                                    s_commandLineError = true;
-                                    break;
-                                }
-
-                                var tzi = TimeZoneParser.ParseTimeZoneId(args[i]);
+                                string tz = NextArgument(args, ref i, "-settimezone");
+                                var tzi = TimeZoneParser.ParseTimeZoneId(tz);
                                 if (tzi == null)
                                 {
-                                    Console.WriteLine($"Invalid value for -setTimezone '{args[i]}'. Use '-listTimezones' option to find valid values.");
+                                    Console.WriteLine($"Invalid value for -setTimezone '{tz}'. Use '-listTimezones' option to find valid values.");
                                     s_commandLineError = true;
                                     break;
                                 }
@@ -761,18 +669,11 @@ Metadata Bearing Filename Pattern
 
                         case "-changetimezone":
                             {
-                                ++i;
-                                if (i >= args.Length)
-                                {
-                                    Console.WriteLine($"Expected value for -changeTimezone command-line argument.");
-                                    s_commandLineError = true;
-                                    break;
-                                }
-
-                                var tzi = TimeZoneParser.ParseTimeZoneId(args[i]);
+                                string tz = NextArgument(args, ref i, "-settimezone");
+                                var tzi = TimeZoneParser.ParseTimeZoneId(tz);
                                 if (tzi == null)
                                 {
-                                    Console.WriteLine($"Invalid value for -changeTimezone '{args[i]}'. Use '-listTimezones' option to find valid values.");
+                                    Console.WriteLine($"Invalid value for -changeTimezone '{tz}'. Use '-listTimezones' option to find valid values.");
                                     s_commandLineError = true;
                                     break;
                                 }
@@ -797,20 +698,18 @@ Metadata Bearing Filename Pattern
                             s_listTimezones = true;
                             break;
 
+                        case "-authonedrive":
+                            s_authOneDriveSourceName = NextArgument(args, ref i, "-authOneDrive");
+                            if (s_authOneDriveSourceName == null)
+                            {
+                                s_commandLineError = true;
+                            }
+                            break;
+
 #if DEBUG
                         case "-testmetadatafromfilename":
-                            {
-                                ++i;
-                                if (i >= args.Length)
-                                {
-                                    Console.WriteLine("Expected argument for test.");
-                                    s_commandLineError = true;
-                                    break;
-                                }
-
-                                s_testAction = MediaFile.TestMetadataFromFilename;
-                                s_testArgument = args[i];
-                            }
+                            s_testAction = MediaFile.TestMetadataFromFilename;
+                            s_testArgument = NextArgument(args, ref i, "-testmetadatafromfilename");
                             break;
 #endif
 
@@ -836,6 +735,28 @@ Metadata Bearing Filename Pattern
             }
 
         } // ParseCommandLine
+
+        static string NextArgument(string[] args, ref int i, string argName)
+        {
+            ++i;
+            if (i >= args.Length)
+            {
+                throw new ArgumentException($"Expected value for {argName} command-line argument.");
+            }
+            return args[i];
+        }
+
+        static FileMeta.DateTag NextArgumentAsDate(string[] args, ref int i, string argName)
+        {
+            var date = NextArgument(args, ref i, argName);
+            FileMeta.DateTag dt;
+            if (!FileMeta.DateTag.TryParse(date, out dt))
+            {
+                throw new ArgumentException($"Invalid value for {argName} '{args[i]}'.");
+            }
+            return dt;
+        }
+
 
         static void ReportProgress(object obj, ProgressEventArgs eventArgs)
         {
@@ -883,6 +804,11 @@ Metadata Bearing Filename Pattern
             {
                 TimeZoneParser.ListTimezoneIds();
                 return;
+            }
+
+            if (s_authOneDriveSourceName != null)
+            {
+                OneDrive.LoginAndAuthorize(s_authOneDriveSourceName);
             }
 
             // Prepare logfile

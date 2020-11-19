@@ -45,6 +45,9 @@
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
+    <Reference Include="Windows">
+      <HintPath>..\..\..\..\..\..\Program Files (x86)\Windows Kits\8.1\References\CommonConfiguration\Neutral\Annotated\Windows.winmd</HintPath>
+    </Reference>
     <Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
@@ -57,7 +60,7 @@
     <Compile Include="MediaFile.cs" />
     <Compile Include="MetaTag.cs" />
     <Compile Include="OAuth.cs" />
-    <Compile Include="OneDrive.cs" />
+    <Compile Include="NamedSource.cs" />
     <Compile Include="PhotoFinisher.cs" />
     <Compile Include="ProcessFileInfo.cs" />
     <Compile Include="Program.cs" />

@@ -126,11 +126,20 @@ Destination:
 
 Standalone Operations:
 
+  -listTimezones   List all timezone IDs and associated offsets.
+
   -authOneDrive <sourceName>
-                   Interactively log in to a Microsoft OneDrive account and
-                   authorize for access to the photos stored there. Store the
-                   credentials in the local computer's secure credential
-                   storage under the specified sourceName.  
+                   Interactively log in to a Microsoft OneDrive account,
+                   authorize for access to the photos stored there, and
+                   define a new named source on the local machine and
+                   account with securely stored credentials.
+
+  -listNamedSources
+                   List named sources such as those created for OneDrive.
+
+  -deleteNamedSource <sourceName>
+                   Delete a pre-configured source such as one created by
+                   onedrive
 
 Operations:
   -autorot         Using the 'orientation' metadata flag, auto rotate images
@@ -223,8 +232,6 @@ Other Options:
 
   -h               Print this help text and exit (ignoring all other
                    commands).
-
-  -listTimezones   List all timezone IDs and associated offsets.
 
   -log             Log all operations. The file will be named
                    ""<date> <time> FMPhotoFinish Log.txt"". If -d is
@@ -389,19 +396,32 @@ Metadata Bearing Filename Pattern
   For example: 2019-01-15_142022 - John Fishing.jpg
 ";
 
+        enum Operation
+        {
+            None,                   // Do nothing
+            CommandLineError,       // A command-line error occurred. Do nothing.
+            ShowHelp,               // Display help/syntax string
+            ProcessMediaFiles,      // Default - process a set of media files
+            ListTimeZones,          // List timezone names
+            ListNamedSources,       // List named source on the local machine and account
+            DeleteNamedSource,      // Delete a named source
+            AuthOneDrive,           // Authorize a OneDrive named source
+#if DEBUG
+            TestAction,
+#endif
+        }
+
         const string c_logsFolder = "logs";
         const string c_logFileSuffix = "FMPhotoFinish Log.txt";
 
-        static bool s_commandLineError;
-        static bool s_showSyntax;
+        static Operation s_operation;
         static bool s_waitBeforeExit;
         static bool s_log;
-        static bool s_listTimezones;
         static TextWriter s_logWriter;
-        static string s_authOneDriveSourceName;
+        static string s_sourceName;
 #if DEBUG
-        static Action<object> s_testAction;
-        static object s_testArgument;
+        static Action<string> s_testAction;
+        static string s_testArgument;
 #endif
 
         static void Main(string[] args)
@@ -413,7 +433,36 @@ Metadata Bearing Filename Pattern
                 photoFinisher.StatusReported += ReportStatus;
                 ParseCommandLine(args, photoFinisher);
 
-                PerformOperations(photoFinisher);
+                switch (s_operation)
+                {
+                    case Operation.ShowHelp:
+                        Console.WriteLine(c_Syntax);
+                        break;
+
+                    case Operation.ProcessMediaFiles:
+                        ProcessMediaFiles(photoFinisher);
+                        break;
+
+                    case Operation.ListTimeZones:
+                        TimeZoneParser.ListTimezoneIds();
+                        break;
+
+                    case Operation.ListNamedSources:
+                        break;
+
+                    case Operation.DeleteNamedSource:
+                        break;
+
+                    case Operation.AuthOneDrive:
+                        NamedSource.OneDriveLoginAndAuthorize(s_sourceName);
+                        break;
+
+#if DEBUG
+                    case Operation.TestAction:
+                        s_testAction(s_testArgument);
+                        break;
+#endif
+                }
             }
             catch (Exception err)
             {
@@ -450,7 +499,7 @@ Metadata Bearing Filename Pattern
             {
                 if (args.Length == 0)
                 {
-                    s_showSyntax = true;
+                    s_operation = Operation.ShowHelp;
                     return;
                 }
 
@@ -460,19 +509,22 @@ Metadata Bearing Filename Pattern
                     {
                         case "-h":
                         case "-?":
-                            s_showSyntax = true;
-                            break;
+                            s_operation = Operation.ShowHelp;
+                            return;
 
                         case "-s":
                             photoFinisher.SelectFiles(NextArgument(args, ref i, "-s"), false);
+                            s_operation = Operation.ProcessMediaFiles;
                             break;
 
                         case "-st":
                             photoFinisher.SelectFiles(NextArgument(args, ref i, "-st"), true);
+                            s_operation = Operation.ProcessMediaFiles;
                             break;
 
                         case "-sdcim":
                             photoFinisher.SelectDcimFiles();
+                            s_operation = Operation.ProcessMediaFiles;
                             break;
 
                         case "-copydcim":
@@ -497,9 +549,7 @@ Metadata Bearing Filename Pattern
                                 string dst = NextArgument(args, ref i, "-d");
                                 if (!Directory.Exists(dst))
                                 {
-                                    Console.WriteLine($"Destination folder '{dst}' does not exist.");
-                                    s_commandLineError = true;
-                                    break;
+                                    throw new ArgumentException($"Destination folder '{dst}' does not exist.");
                                 }
                                 photoFinisher.DestinationDirectory = Path.GetFullPath(dst);
                             }
@@ -525,9 +575,7 @@ Metadata Bearing Filename Pattern
                                     photoFinisher.SortBy = DatePathType.YMDS;
                                     break;
                                 default:
-                                    Console.WriteLine($"Unexpected value for -sortby: {args[i]}.");
-                                    s_commandLineError = true;
-                                    break;
+                                    throw new ArgumentException($"Unexpected value for -sortby: {args[i]}.");
                             }
                             break;
 
@@ -606,9 +654,7 @@ Metadata Bearing Filename Pattern
                                 ++i;
                                 if (i >= args.Length)
                                 {
-                                    Console.WriteLine($"Expected value for -shiftDate command-line argument.");
-                                    s_commandLineError = true;
-                                    break;
+                                    throw new ArgumentException($"Expected value for -shiftDate command-line argument.");
                                 }
 
                                 string timeShift = NextArgument(args, ref i, "-shiftdate");
@@ -659,9 +705,7 @@ Metadata Bearing Filename Pattern
                                 var tzi = TimeZoneParser.ParseTimeZoneId(tz);
                                 if (tzi == null)
                                 {
-                                    Console.WriteLine($"Invalid value for -setTimezone '{tz}'. Use '-listTimezones' option to find valid values.");
-                                    s_commandLineError = true;
-                                    break;
+                                    throw new ArgumentException($"Invalid value for -setTimezone '{tz}'. Use '-listTimezones' option to find valid values.");
                                 }
                                 photoFinisher.SetTimezoneTo = tzi;
                             }
@@ -673,9 +717,7 @@ Metadata Bearing Filename Pattern
                                 var tzi = TimeZoneParser.ParseTimeZoneId(tz);
                                 if (tzi == null)
                                 {
-                                    Console.WriteLine($"Invalid value for -changeTimezone '{tz}'. Use '-listTimezones' option to find valid values.");
-                                    s_commandLineError = true;
-                                    break;
+                                    throw new ArgumentException($"Invalid value for -changeTimezone '{tz}'. Use '-listTimezones' option to find valid values.");
                                 }
                                 photoFinisher.ChangeTimezoneTo = tzi;
                             }
@@ -695,43 +737,43 @@ Metadata Bearing Filename Pattern
 
                         case "-listtimezones":
                         case "-listtimezone":
-                            s_listTimezones = true;
+                            s_operation = Operation.ListTimeZones;
                             break;
 
                         case "-authonedrive":
-                            s_authOneDriveSourceName = NextArgument(args, ref i, "-authOneDrive");
-                            if (s_authOneDriveSourceName == null)
-                            {
-                                s_commandLineError = true;
-                            }
+                            s_sourceName = NextArgument(args, ref i, "-authOneDrive");
+                            s_operation = Operation.AuthOneDrive;
                             break;
 
 #if DEBUG
+                        case "-testaccess":
+                            s_testAction = NamedSource.TestAccess;
+                            s_testArgument = NextArgument(args, ref i, "-testaccess");
+                            s_operation = Operation.TestAction;
+                            break;
+
                         case "-testmetadatafromfilename":
                             s_testAction = MediaFile.TestMetadataFromFilename;
                             s_testArgument = NextArgument(args, ref i, "-testmetadatafromfilename");
+                            s_operation = Operation.TestAction;
                             break;
 #endif
 
                         default:
-                            Console.WriteLine($"Command-line syntax error: '{args[i]}' is not a recognized command.");
-                            Console.WriteLine("Use '-h' for syntax help");
-                            s_commandLineError = true;
-                            break;
+                            throw new ArgumentException($"Unexpected command-line argument: {args[i]}");
                     }
                 }
 
                 if (photoFinisher.SortBy != DatePathType.None && string.IsNullOrEmpty(photoFinisher.DestinationDirectory))
                 {
-                    Console.WriteLine("Command-line error: '-sort' option requires '-d' destination option.");
-                    Console.WriteLine("Use '-h' for syntax help");
-                    s_commandLineError = true;
+                    throw new ArgumentException("'-sort' option requires '-d' destination option.");
                 }
             }
             catch (Exception err)
             {
                 Console.WriteLine(err.Message);
-                s_commandLineError = true;
+                Console.WriteLine("Use '-h' for syntax help");
+                s_operation = Operation.CommandLineError;
             }
 
         } // ParseCommandLine
@@ -766,7 +808,7 @@ Metadata Bearing Filename Pattern
                 s_logWriter.WriteLine(eventArgs.Message ?? string.Empty);
             }
         }
-        
+
         static void ReportStatus(object obj, ProgressEventArgs eventArgs)
         {
             if (string.IsNullOrEmpty(eventArgs.Message))
@@ -782,35 +824,8 @@ Metadata Bearing Filename Pattern
             }
         }
 
-        static void PerformOperations(PhotoFinisher photoFinisher)
+        static void ProcessMediaFiles(PhotoFinisher photoFinisher)
         {
-            if (s_commandLineError) return;
-
-#if DEBUG
-            if (s_testAction != null)
-            {
-                s_testAction(s_testArgument);
-                return;
-            }
-#endif
-
-            if (s_showSyntax)
-            {
-                Console.WriteLine(c_Syntax);
-                return;
-            }
-
-            if (s_listTimezones)
-            {
-                TimeZoneParser.ListTimezoneIds();
-                return;
-            }
-
-            if (s_authOneDriveSourceName != null)
-            {
-                OneDrive.LoginAndAuthorize(s_authOneDriveSourceName);
-            }
-
             // Prepare logfile
             if (s_log)
             {

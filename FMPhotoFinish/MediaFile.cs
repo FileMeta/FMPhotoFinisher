@@ -1715,11 +1715,8 @@ namespace FMPhotoFinish
 
         #region Unit Tests
 
-        static public void TestMetadataFromFilename(object argument)
+        static public void TestMetadataFromFilename(string filename)
         {
-            string filename = argument as string;
-            if (filename == null) return;
-
             string subject;
             string title;
             string[] hashtags;

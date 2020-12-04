@@ -4,21 +4,17 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Diagnostics;
-using Windows.Security.Credentials;
+using FileMeta;
 
-/* To add the reference for PasswordVault in Visual Studio:
- * 1. Add a reference
- * 2. Browse to C:\Program Files (x86)\Windows Kits\8.1\References\CommonConfiguration\Neutral\Annotated\Windows.winmd"
- * (Note that the .winmd extension is not selected by default)
- */
-
-
-namespace FileMeta
+namespace FMPhotoFinish
 {
+
+    // OneDrive API Docs: https://docs.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/
+
     // Access Microsoft OneDrive
     class NamedSource
     {
-        const string c_pvResource = "FMPhotoFinish";
+        const string c_targetPrefix = "FMPhotoFinish:";
         const string c_oneDrivePrefix = "OneDrive:";
 
         const string c_microsoftAuthorizaitonEndpoint = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
@@ -31,9 +27,8 @@ namespace FileMeta
             var oa = new OAuth(c_microsoftAuthorizaitonEndpoint, c_microsoftTokenExchangeEndpoint, c_clientId);
             if (oa.Authorize(c_scopes))
             {
-                // Store the refresh token in the password vault
-                var vault = new PasswordVault();
-                vault.Add(new PasswordCredential(c_pvResource, sourceName, c_oneDrivePrefix + oa.Refresh_Token));
+                // Store the refresh token in the Credential manager
+                CredentialManager.Add(c_targetPrefix + sourceName, string.Empty, c_oneDrivePrefix + oa.Refresh_Token);
                 Console.WriteLine($"Successfully created OneDrive named source: {sourceName}");
             }
             else
@@ -44,23 +39,28 @@ namespace FileMeta
 
         public static void TestAccess(string sourceName)
         {
-            var vault = new PasswordVault();
-            var cred = vault.Retrieve("FMPhotoFinish", sourceName);
-
-            var password = cred.Password;
-            if (!password.StartsWith(c_oneDrivePrefix, StringComparison.OrdinalIgnoreCase))
+            string username;
+            string credential;
+            if (!CredentialManager.Retrieve(c_targetPrefix + sourceName, out username, out credential))
+            {
+                throw new Exception($"Named source not found: {sourceName}");
+            }
+            if (!credential.StartsWith(c_oneDrivePrefix, StringComparison.OrdinalIgnoreCase))
             {
                 throw new Exception("Named source is not 'OneDrive:'");
             }
 
             var oa = new OAuth(c_microsoftAuthorizaitonEndpoint, c_microsoftTokenExchangeEndpoint, c_clientId);
-            if (!oa.Refresh(password.Substring(c_oneDrivePrefix.Length)))
+            if (!oa.Refresh(credential.Substring(c_oneDrivePrefix.Length)))
             {
                 throw new Exception($"Failed to refresh OneDrive access: {oa.Error}");
             }
 
-            Console.WriteLine(oa.Access_Token);
+            var od = new OneDrive(oa.Access_Token);
+            od.Test();
         }
+
+
 
     }
 }

@@ -1262,9 +1262,16 @@ namespace FMPhotoFinish
                 throw new ApplicationException("Cannot update metadata on unsupported media type.");
 
             // Timezone to use for conversions as values are saved.
-            var timezone = (m_timezone != null && m_timezone.Kind == TimeZoneKind.Normal)
-                ? m_timezone
-                : new TimeZoneTag(TimeZone.CurrentTimeZone.GetUtcOffset(m_creationDate.Value), TimeZoneKind.Normal);
+            TimeZoneTag timezone;
+            if (m_timezone != null && m_timezone.Kind == TimeZoneKind.Normal)
+            {
+                timezone = m_timezone;
+            }
+            else
+            {
+                DateTime date = m_creationDate ?? m_psDateTaken ?? m_psDateEncoded ?? m_isomCreationTime ?? m_etDateTimeOriginal ?? m_fsDateCreated;
+                timezone = new TimeZoneTag(TimeZone.CurrentTimeZone.GetUtcOffset(date), TimeZoneKind.Normal);
+            }
 
             // If audio or video, attempt to use Isom to update creationDate
             bool creationDateStoredByIsom = false;

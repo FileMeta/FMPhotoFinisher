@@ -415,6 +415,9 @@ Metadata Bearing Filename Pattern
         const string c_logFileSuffix = "FMPhotoFinish Log.txt";
 
         static Operation s_operation;
+        static SourceConfiguration s_sourceConfiguration;
+        static IMediaSource s_mediaSource;
+        static PhotoFinisher s_photoFinisher;
         static bool s_waitBeforeExit;
         static bool s_log;
         static TextWriter s_logWriter;
@@ -428,10 +431,7 @@ Metadata Bearing Filename Pattern
         {
             try
             {
-                var photoFinisher = new PhotoFinisher();
-                photoFinisher.ProgressReported += ReportProgress;
-                photoFinisher.StatusReported += ReportStatus;
-                ParseCommandLine(args, photoFinisher);
+                ParseCommandLine(args);
 
                 switch (s_operation)
                 {
@@ -440,7 +440,7 @@ Metadata Bearing Filename Pattern
                         break;
 
                     case Operation.ProcessMediaFiles:
-                        ProcessMediaFiles(photoFinisher);
+                        ProcessMediaFiles();
                         break;
 
                     case Operation.ListTimeZones:
@@ -493,8 +493,15 @@ Metadata Bearing Filename Pattern
             }
         }
 
-        static void ParseCommandLine(string[] args, PhotoFinisher photoFinisher)
+        static void ParseCommandLine(string[] args)
         {
+            s_sourceConfiguration = new SourceConfiguration();
+            Program.s_photoFinisher = new PhotoFinisher();
+
+            Program.s_photoFinisher.ProgressReported += ReportProgress;
+            Program.s_photoFinisher.StatusReported += ReportStatus;
+
+
             try
             {
                 if (args.Length == 0)
@@ -513,35 +520,40 @@ Metadata Bearing Filename Pattern
                             return;
 
                         case "-s":
-                            photoFinisher.SelectFiles(NextArgument(args, ref i, "-s"), false);
+                            if (s_mediaSource != null) throw new Exception("CommandLine -s: Can only specify one source.");
+                            s_mediaSource = new FileSource(NextArgument(args, ref i, "-s"), false);
                             s_operation = Operation.ProcessMediaFiles;
                             break;
 
                         case "-st":
-                            photoFinisher.SelectFiles(NextArgument(args, ref i, "-st"), true);
+                            if (s_mediaSource != null) throw new Exception("CommandLine -st: Can only specify one source.");
+                            s_mediaSource = new FileSource(NextArgument(args, ref i, "-s"), true);
                             s_operation = Operation.ProcessMediaFiles;
                             break;
 
                         case "-sdcim":
-                            photoFinisher.SelectDcimFiles();
+                            if (s_mediaSource != null) throw new Exception("CommandLine -sdcim: Can only specify one source.");
+                            s_mediaSource = new DcimSource();
                             s_operation = Operation.ProcessMediaFiles;
                             break;
 
+#if DEBUG
                         case "-copydcim":
                             {
                                 Console.WriteLine("Copying test files.");
-                                int n = photoFinisher.CopyDcimTestFiles();
+                                int n = DcimSource.CopyDcimTestFiles();
                                 Console.WriteLine($"Copied {n} files from DCIM_Test to DCIM.");
                             }
                             break;
+#endif
 
                         case "-selectafter":
-                            photoFinisher.SelectAfter = NextArgumentAsDate(args, ref i, "-selectAfter")
+                            s_sourceConfiguration.SelectAfter = NextArgumentAsDate(args, ref i, "-selectAfter")
                                 .ResolveTimeZone(TimeZoneInfo.Local).Date;
                             break;
 
                         case "-selectincremental":
-                            photoFinisher.SelectIncremental = true;
+                            s_sourceConfiguration.SelectIncremental = true;
                             break;
 
                         case "-d":
@@ -551,7 +563,8 @@ Metadata Bearing Filename Pattern
                                 {
                                     throw new ArgumentException($"Destination folder '{dst}' does not exist.");
                                 }
-                                photoFinisher.DestinationDirectory = Path.GetFullPath(dst);
+                                s_sourceConfiguration.DestinationDirectory = Path.GetFullPath(dst);
+                                s_photoFinisher.DestinationDirectory = s_sourceConfiguration.DestinationDirectory;
                             }
                             break;
 
@@ -563,16 +576,16 @@ Metadata Bearing Filename Pattern
                             switch (NextArgument(args, ref i, "-sortby").ToLowerInvariant())
                             {
                                 case "y":
-                                    photoFinisher.SortBy = DatePathType.Y;
+                                    s_photoFinisher.SortBy = DatePathType.Y;
                                     break;
                                 case "ym":
-                                    photoFinisher.SortBy = DatePathType.YM;
+                                    s_photoFinisher.SortBy = DatePathType.YM;
                                     break;
                                 case "ymd":
-                                    photoFinisher.SortBy = DatePathType.YMD;
+                                    s_photoFinisher.SortBy = DatePathType.YMD;
                                     break;
                                 case "ymds":
-                                    photoFinisher.SortBy = DatePathType.YMDS;
+                                    s_photoFinisher.SortBy = DatePathType.YMDS;
                                     break;
                                 default:
                                     throw new ArgumentException($"Unexpected value for -sortby: {args[i]}.");
@@ -580,72 +593,72 @@ Metadata Bearing Filename Pattern
                             break;
 
                         case "-sort":
-                            photoFinisher.SortBy = DatePathType.YMD;
+                            s_photoFinisher.SortBy = DatePathType.YMD;
                             break;
 
                         case "-move":
-                            photoFinisher.Move = true;
+                            s_sourceConfiguration.MoveFiles = true;
                             break;
 
                         case "-autorot":
-                            photoFinisher.AutoRotate = true;
+                            s_photoFinisher.AutoRotate = true;
                             break;
 
                         case "-orderednames":
-                            photoFinisher.SetOrderedNames = true;
-                            photoFinisher.SetMetadataNames = false;
+                            s_photoFinisher.SetOrderedNames = true;
+                            s_photoFinisher.SetMetadataNames = false;
                             break;
 
                         case "-filenamefrommetadata":
-                            photoFinisher.SetMetadataNames = true;
-                            photoFinisher.SetOrderedNames = false;
+                            s_photoFinisher.SetMetadataNames = true;
+                            s_photoFinisher.SetOrderedNames = false;
                             break;
 
                         case "-metadatafromfilename":
-                            photoFinisher.MetadataFromFilename = SetMode.SetIfEmpty;
+                            s_photoFinisher.MetadataFromFilename = SetMode.SetIfEmpty;
                             break;
 
                         case "-metadatafromfilenameoverwrite":
-                            photoFinisher.MetadataFromFilename = SetMode.SetAlways;
+                            s_photoFinisher.MetadataFromFilename = SetMode.SetAlways;
                             break;
 
                         case "-saveoriginalfn":
                         case "-saveoriginalfilename":
-                            photoFinisher.SaveOriginalFilaname = true;
+                            s_photoFinisher.SaveOriginalFilaname = true;
                             break;
 
                         case "-setuuid":
-                            photoFinisher.SetUuid = true;
+                            s_photoFinisher.SetUuid = true;
                             break;
 
                         case "-transcode":
-                            photoFinisher.Transcode = true;
+                            s_photoFinisher.Transcode = true;
                             break;
 
                         case "-tag":
-                            photoFinisher.AddKeywords.Add(NextArgument(args, ref i, "-tag"));
+                            s_photoFinisher.AddKeywords.Add(NextArgument(args, ref i, "-tag"));
                             break;
 
                         case "-determinedate":
-                            photoFinisher.AlwaysSetDate = true;
+                            s_photoFinisher.AlwaysSetDate = true;
                             break;
 
                         case "-alltheway":
-                            photoFinisher.AutoRotate = true;
-                            if (!photoFinisher.SetMetadataNames)
-                                photoFinisher.SetOrderedNames = true;
-                            photoFinisher.SaveOriginalFilaname = true;
-                            photoFinisher.SetUuid = true;
-                            photoFinisher.Transcode = true;
-                            photoFinisher.AlwaysSetDate = true;
+                            s_photoFinisher.AutoRotate = true;
+                            if (!s_photoFinisher.SetMetadataNames)
+                                s_photoFinisher.SetOrderedNames = true;
+                            s_photoFinisher.SaveOriginalFilaname = true;
+                            s_photoFinisher.SetUuid = true;
+                            s_photoFinisher.Transcode = true;
+                            s_photoFinisher.AlwaysSetDate = true;
                             break;
 
                         case "-deduplicate":
-                            photoFinisher.DeDuplicate = true;
+                            s_photoFinisher.DeDuplicate = true;
                             break;
 
                         case "-setdate":
-                            photoFinisher.SetDateTo = NextArgumentAsDate(args, ref i, "-setdate")
+                            s_photoFinisher.SetDateTo = NextArgumentAsDate(args, ref i, "-setdate")
                                 .ResolveTimeZone(TimeZoneInfo.Local);
                             break;
 
@@ -669,7 +682,7 @@ Metadata Bearing Filename Pattern
                                         throw new ArgumentException($"Invalid value for -shiftDate '{timeShift}'.");
                                     }
 
-                                    photoFinisher.ShiftDateBy = ts;
+                                    s_photoFinisher.ShiftDateBy = ts;
                                 }
 
                                 // Else, shift amount is the difference of two times
@@ -694,7 +707,7 @@ Metadata Bearing Filename Pattern
                                     dtSource.ResolveTimeZone(TimeZoneInfo.Local);
 
                                     // For whatever reason, they might have used different timezones. Take the difference between the UTC versions.
-                                    photoFinisher.ShiftDateBy = dtTarget.DateUtc.Subtract(dtSource.DateUtc);
+                                    s_photoFinisher.ShiftDateBy = dtTarget.DateUtc.Subtract(dtSource.DateUtc);
                                 }
                             }
                             break;
@@ -707,7 +720,7 @@ Metadata Bearing Filename Pattern
                                 {
                                     throw new ArgumentException($"Invalid value for -setTimezone '{tz}'. Use '-listTimezones' option to find valid values.");
                                 }
-                                photoFinisher.SetTimezoneTo = tzi;
+                                s_photoFinisher.SetTimezoneTo = tzi;
                             }
                             break;
 
@@ -719,16 +732,16 @@ Metadata Bearing Filename Pattern
                                 {
                                     throw new ArgumentException($"Invalid value for -changeTimezone '{tz}'. Use '-listTimezones' option to find valid values.");
                                 }
-                                photoFinisher.ChangeTimezoneTo = tzi;
+                                s_photoFinisher.ChangeTimezoneTo = tzi;
                             }
                             break;
 
                         case "-updatefscreate":
-                            photoFinisher.UpdateFileSystemDateCreated = true;
+                            s_photoFinisher.UpdateFileSystemDateCreated = true;
                             break;
 
                         case "-updatefsmod":
-                            photoFinisher.UpdateFileSystemDateModified = true;
+                            s_photoFinisher.UpdateFileSystemDateModified = true;
                             break;
 
                         case "-log":
@@ -764,7 +777,7 @@ Metadata Bearing Filename Pattern
                     }
                 }
 
-                if (photoFinisher.SortBy != DatePathType.None && string.IsNullOrEmpty(photoFinisher.DestinationDirectory))
+                if (s_photoFinisher.SortBy != DatePathType.None && string.IsNullOrEmpty(s_photoFinisher.DestinationDirectory))
                 {
                     throw new ArgumentException("'-sort' option requires '-d' destination option.");
                 }
@@ -824,12 +837,12 @@ Metadata Bearing Filename Pattern
             }
         }
 
-        static void ProcessMediaFiles(PhotoFinisher photoFinisher)
+        static void ProcessMediaFiles()
         {
             // Prepare logfile
             if (s_log)
             {
-                string logDir = photoFinisher.DestinationDirectory;
+                string logDir = s_sourceConfiguration.DestinationDirectory;
                 if (string.IsNullOrEmpty(logDir))
                 {
                     logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), c_logsFolder);
@@ -854,8 +867,8 @@ Metadata Bearing Filename Pattern
             }
 
             // Do the work.
-            photoFinisher.PerformSelection();
-            photoFinisher.PerformOperations();
+            s_mediaSource.RetrieveMediaFiles(s_sourceConfiguration, s_photoFinisher);
+            s_photoFinisher.PerformOperations();
         }
 
     } // Class Program

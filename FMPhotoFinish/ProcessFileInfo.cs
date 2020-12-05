@@ -19,6 +19,16 @@ namespace FMPhotoFinish
 
         }
 
+        public ProcessFileInfo(string filepath, long size, string originalFilename,
+            DateTime originalDateCreated, DateTime originalDateModified)
+        {
+            Filepath = filepath;
+            Size = size;
+            OriginalFilepath = originalFilename;
+            OriginalDateCreated = originalDateCreated;
+            OriginalDateModified = originalDateModified;
+        }
+
         public string Filepath { get; set; }
         public long Size { get; private set; }
         public string OriginalFilepath { get; private set; }

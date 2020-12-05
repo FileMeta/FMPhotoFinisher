@@ -527,13 +527,19 @@ Metadata Bearing Filename Pattern
 
                         case "-st":
                             if (s_mediaSource != null) throw new Exception("CommandLine -st: Can only specify one source.");
-                            s_mediaSource = new FileSource(NextArgument(args, ref i, "-s"), true);
+                            s_mediaSource = new FileSource(NextArgument(args, ref i, "-st"), true);
                             s_operation = Operation.ProcessMediaFiles;
                             break;
 
                         case "-sdcim":
                             if (s_mediaSource != null) throw new Exception("CommandLine -sdcim: Can only specify one source.");
                             s_mediaSource = new DcimSource();
+                            s_operation = Operation.ProcessMediaFiles;
+                            break;
+
+                        case "-sname":
+                            if (s_mediaSource != null) throw new Exception("CommandLine -sname: Can only specify one source.");
+                            s_mediaSource = NamedSource.GetNamedSource(NextArgument(args, ref i, "-sname"));
                             s_operation = Operation.ProcessMediaFiles;
                             break;
 
@@ -759,12 +765,6 @@ Metadata Bearing Filename Pattern
                             break;
 
 #if DEBUG
-                        case "-testaccess":
-                            s_testAction = NamedSource.TestAccess;
-                            s_testArgument = NextArgument(args, ref i, "-testaccess");
-                            s_operation = Operation.TestAction;
-                            break;
-
                         case "-testmetadatafromfilename":
                             s_testAction = MediaFile.TestMetadataFromFilename;
                             s_testArgument = NextArgument(args, ref i, "-testmetadatafromfilename");

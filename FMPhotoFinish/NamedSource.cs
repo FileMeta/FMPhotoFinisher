@@ -17,14 +17,14 @@ namespace FMPhotoFinish
         const string c_targetPrefix = "FMPhotoFinish:";
         const string c_oneDrivePrefix = "OneDrive:";
 
-        const string c_microsoftAuthorizaitonEndpoint = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
+        const string c_microsoftAuthorizatonEndpoint = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
         const string c_microsoftTokenExchangeEndpoint = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
         const string c_clientId = "78347c9d-b79a-4276-a772-f6563b012d70";
         const string c_scopes = "Files.Read offline_access openid User.Read"; // offline_access is required to get a refresh token
 
         public static void OneDriveLoginAndAuthorize(string sourceName)
         {
-            var oa = new OAuth(c_microsoftAuthorizaitonEndpoint, c_microsoftTokenExchangeEndpoint, c_clientId);
+            var oa = new OAuth(c_microsoftAuthorizatonEndpoint, c_microsoftTokenExchangeEndpoint, c_clientId);
             if (oa.Authorize(c_scopes))
             {
                 // Store the refresh token in the Credential manager
@@ -37,7 +37,7 @@ namespace FMPhotoFinish
             }
         }
 
-        public static void TestAccess(string sourceName)
+        public static IMediaSource GetNamedSource(string sourceName)
         {
             string username;
             string credential;
@@ -50,17 +50,18 @@ namespace FMPhotoFinish
                 throw new Exception("Named source is not 'OneDrive:'");
             }
 
-            var oa = new OAuth(c_microsoftAuthorizaitonEndpoint, c_microsoftTokenExchangeEndpoint, c_clientId);
-            if (!oa.Refresh(credential.Substring(c_oneDrivePrefix.Length)))
+            return new OneDriveSource(sourceName, credential.Substring(c_oneDrivePrefix.Length));
+        }
+
+        public static string GetOnedriveAccessToken(string refreshToken)
+        {
+            var oa = new OAuth(c_microsoftAuthorizatonEndpoint, c_microsoftTokenExchangeEndpoint, c_clientId);
+            if (!oa.Refresh(refreshToken))
             {
                 throw new Exception($"Failed to refresh OneDrive access: {oa.Error}");
             }
-
-            var od = new OneDrive(oa.Access_Token);
-            od.Test();
+            return oa.Access_Token;
         }
-
-
 
     }
 }

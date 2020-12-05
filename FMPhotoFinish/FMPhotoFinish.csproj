@@ -63,7 +63,7 @@
     <Compile Include="MetaTag.cs" />
     <Compile Include="OAuth.cs" />
     <Compile Include="NamedSource.cs" />
-    <Compile Include="OneDrive.cs" />
+    <Compile Include="OneDriveSource.cs" />
     <Compile Include="PhotoFinisher.cs" />
     <Compile Include="ProcessFileInfo.cs" />
     <Compile Include="Program.cs" />

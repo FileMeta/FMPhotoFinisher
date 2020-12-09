@@ -70,12 +70,13 @@ namespace FMPhotoFinish
         /// <remarks>Only sets a bookmark if <see cref="SelectIncremental"/> is set AND
         /// sourcePath has a value. Otherwise, does nothing.
         /// </remarks>
-        public void SetBookmark(string sourcePath, DateTime? latestFound)
+        public bool SetBookmark(string sourcePath, DateTime? latestFound)
         {
-            if (!SelectIncremental) return;
-            if (!latestFound.HasValue) return;
+            if (!SelectIncremental) return false;
+            if (!latestFound.HasValue) return false;
             var bookmark = new IncrementalBookmark(DestinationDirectory);
             bookmark.SetBookmark(sourcePath, latestFound.Value);
+            return true;
         }
 
     }

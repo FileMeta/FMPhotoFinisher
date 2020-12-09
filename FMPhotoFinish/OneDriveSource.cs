@@ -91,6 +91,7 @@ namespace FMPhotoFinish
         void DownloadMediaFiles(List<OdFileInfo> queue, SourceConfiguration sourceConfig, IMediaQueue mediaQueue)
         {
             mediaQueue.ReportProgress($"Downloading media files from OneDrive to working folder: {sourceConfig.DestinationDirectory}.");
+            DateTime newestSelection = DateTime.MinValue;
 
             // Sum up the size of the files to be downloaded
             long selectedFilesSize = 0;
@@ -137,6 +138,11 @@ namespace FMPhotoFinish
                     fi.OriginalFilename,
                     fi.OriginalDateCreated ?? DateTime.MinValue,
                     fi.OriginalDateModified ?? DateTime.MinValue));
+
+                if (fi.BookmarkDate.HasValue && newestSelection < fi.BookmarkDate)
+                {
+                    newestSelection = fi.BookmarkDate.Value;
+                }
             }
 
             TimeSpan elapsed;
@@ -148,6 +154,13 @@ namespace FMPhotoFinish
 
             mediaQueue.ReportStatus(null);
             mediaQueue.ReportProgress($"Download complete. {queue.Count} files, {bytesDownloaded / (1024.0 * 1024.0): #,##0.0} MB, {elapsed.FmtCustom()} elapsed");
+            if (newestSelection > DateTime.MinValue)
+            {
+                if (sourceConfig.SetBookmark(m_bookmarkPath, newestSelection))
+                {
+                    mediaQueue.ReportProgress($"Bookmark Set to {newestSelection}");
+                }
+            }
         }
 
         static DateTime? GetBookmarkDate(XPathNavigator fileNode)

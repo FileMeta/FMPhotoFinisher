@@ -8,6 +8,7 @@ using System.Xml;
 using System.Xml.XPath;
 using System.Net;
 using System.IO;
+using System.Globalization;
 
 
 namespace FMPhotoFinish
@@ -17,6 +18,8 @@ namespace FMPhotoFinish
         const string c_targetPrefix = "FMPhotoFinish:";
         const string c_oneDriveBookmarkPrefix = "OneDrive/";
         const string c_oneDriveCameraRollUrl = @"https://graph.microsoft.com/v1.0/me/drive/special/cameraroll/children";
+        const string c_oneDriveItemPrefix = @"https://graph.microsoft.com/v1.0/me/drive/items/";    // Should be followed by the item ID
+        const string c_oneDriveContentSuffix = @"/content";
 
         string m_sourceName;
         string m_refreshToken;
@@ -32,12 +35,18 @@ namespace FMPhotoFinish
 
         public void RetrieveMediaFiles(SourceConfiguration sourceConfig, IMediaQueue mediaQueue)
         {
+            // if a destination directory not specified, error
+            if (string.IsNullOrEmpty(sourceConfig.DestinationDirectory))
+                throw new InvalidOperationException("OneDrive Source requires destination directory -d");
+
             mediaQueue.ReportProgress($"Connecting to OneDrive: {m_sourceName}");
             m_accessToken = NamedSource.GetOnedriveAccessToken(m_refreshToken);
             var queue = SelectFiles(sourceConfig, mediaQueue);
+
+            DownloadMediaFiles(queue, sourceConfig, mediaQueue);
         }
 
-        List<string> SelectFiles(SourceConfiguration sourceConfig, IMediaQueue mediaQueue)
+        List<OdFileInfo> SelectFiles(SourceConfiguration sourceConfig, IMediaQueue mediaQueue)
         {
             mediaQueue.ReportProgress("Selecting files");
 
@@ -48,28 +57,153 @@ namespace FMPhotoFinish
                 mediaQueue.ReportProgress($"  Filter: Created after {after.Value}");
             }
 
-            // Retrieve the filenames
+            // Retrieve file info and enqueue
+            var queue = new List<OdFileInfo>();
             int count = 0;
             string nextUrl = c_oneDriveCameraRollUrl;
-            for (; ; )
+            do
             {
-                Console.WriteLine(nextUrl);
                 var fileList = FetchJson(nextUrl);
                 var root = fileList.CreateNavigator();
                 nextUrl = root.XPVal("/root/a:item[@item='@odata.nextLink']");
 
                 foreach (XPathNavigator node in fileList.CreateNavigator().Select("/root/value/item"))
                 {
-                    Console.WriteLine(node.XPVal("name"));
                     ++count;
+                    var odfi = new OdFileInfo(node);
+
+                    if (!after.HasValue
+                        || (odfi.BookmarkDate.HasValue && odfi.BookmarkDate > after.Value))
+                    {
+                        queue.Add(odfi);
+                    }
                 }
 
-                if (string.IsNullOrEmpty(nextUrl)) break;
+                mediaQueue.ReportStatus($"  Selected {queue.Count} Skipped {count - queue.Count}");
             }
-            Console.WriteLine($"{count} files");
+            while (!string.IsNullOrEmpty(nextUrl));
+            mediaQueue.ReportStatus(null);
+            mediaQueue.ReportProgress($"Selected {queue.Count} Skipped {count - queue.Count}");
+
+            return queue;
+        }
+
+        void DownloadMediaFiles(List<OdFileInfo> queue, SourceConfiguration sourceConfig, IMediaQueue mediaQueue)
+        {
+            mediaQueue.ReportProgress($"Downloading media files from OneDrive to working folder: {sourceConfig.DestinationDirectory}.");
+
+            // Sum up the size of the files to be downloaded
+            long selectedFilesSize = 0;
+            foreach (var fi in queue)
+            {
+                selectedFilesSize += fi.Size;
+            }
+
+            uint startTicks = (uint)Environment.TickCount;
+            long bytesDownloaded = 0;
+
+            int n = 0;
+            foreach (var fi in queue)
+            {
+                if (bytesDownloaded == 0)
+                {
+                    mediaQueue.ReportStatus($"Downloading file {n + 1} of {queue.Count}");
+                }
+                else
+                {
+                    uint ticksElapsed;
+                    unchecked
+                    {
+                        ticksElapsed = (uint)Environment.TickCount - startTicks;
+                    }
+
+                    double bps = ((double)bytesDownloaded * 8000.0) / (double)ticksElapsed;
+                    TimeSpan remain = new TimeSpan(((long)((selectedFilesSize - bytesDownloaded) / (bps/8))) * 10000000L);
+
+                    mediaQueue.ReportStatus($"Downloading file {n + 1} of {queue.Count}. Time remaining: {remain.FmtCustom()} Mbps: {(bps / (1024 * 1024)):#,###.###}");
+                }
+
+                string dstFilepath = Path.Combine(sourceConfig.DestinationDirectory, fi.OriginalFilename);
+                MediaFile.MakeFilepathUnique(ref dstFilepath);
+
+                FetchFile(fi.Url, dstFilepath);
+                bytesDownloaded += fi.Size;
+                ++n;
+
+                // Add to the destination queue
+                mediaQueue.Add(new ProcessFileInfo(
+                    dstFilepath,
+                    fi.Size,
+                    fi.OriginalFilename,
+                    fi.OriginalDateCreated ?? DateTime.MinValue,
+                    fi.OriginalDateModified ?? DateTime.MinValue));
+            }
+
+            TimeSpan elapsed;
+            unchecked
+            {
+                uint ticksElapsed = (uint)Environment.TickCount - startTicks;
+                elapsed = new TimeSpan(ticksElapsed * 10000L);
+            }
+
+            mediaQueue.ReportStatus(null);
+            mediaQueue.ReportProgress($"Download complete. {queue.Count} files, {bytesDownloaded / (1024.0 * 1024.0): #,##0.0} MB, {elapsed.FmtCustom()} elapsed");
+        }
+
+        static DateTime? GetBookmarkDate(XPathNavigator fileNode)
+        {
+            // Ideally we would use DateTaken. But for photos, it is in localTime even though
+            // the provided metadata uses the 'Z' suffix. For videos it is in UCT. This risks
+            // missing future files if the last file is a video and an upcoming file in the next
+            // patch is a photo.
+            //
+            // Follow the same pattern as with MediaFile.GetBookmarkDate
+            // 1. Parse from filename.
+            // 2. Use DateTaken from photo but treat to local time with no timezone shift.
+            // 3. Use DateTaken from video (really DateEncoded) but shift to local time.
+            // 4. Use file system DateCreated and shift to local time.
+          
+            // From filename
+            DateTime dt;
+            if (MediaFile.TryParseDateTimeFromFilename(fileNode.XPVal("name"), out dt))
+            {
+                return dt;
+            }
+
+            // If JPEG
+            if (string.Equals(fileNode.XPVal("file/mimeType"), "image/jpeg", StringComparison.Ordinal)
+                && TryParseDt(fileNode.XPVal("photo/takenDateTime"), out dt))
+            {
+                // Change to local without shifting the time value
+                return new DateTime(dt.Ticks, DateTimeKind.Local);
+            }
+
+            // If MP4
+            if (string.Equals(fileNode.XPVal("file/mimeType"), "video/mp4", StringComparison.Ordinal)
+                && TryParseDt(fileNode.XPVal("photo/takenDateTime"), out dt))
+            {
+                // Change to local WITH shifting the time value
+                return dt.ToLocalTime();
+            }
+
+            if (TryParseDt(fileNode.XPVal("fileSystemInfo/createdDateTime"), out dt))
+            {
+                // Change to local WITH shifting the time value
+                return dt.ToLocalTime();
+            }
             return null;
         }
 
+        static bool TryParseDt(string value, out DateTime result)
+        {
+            if (value == null)
+            {
+                result = DateTime.MinValue;
+                return false;
+            }
+            return (DateTime.TryParse(value, CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind | DateTimeStyles.NoCurrentDateDefault, out result));
+        }
 
         #region REST Client
 
@@ -91,6 +225,20 @@ namespace FMPhotoFinish
                 using (var reader = System.Runtime.Serialization.Json.JsonReaderWriterFactory.CreateJsonReader(response.GetResponseStream(), new System.Xml.XmlDictionaryReaderQuotas()))
                 {
                     return new XPathDocument(reader);
+                }
+            }
+        }
+
+        void FetchFile(string url, string filepath)
+        {
+            using (var response = FetchResponse(url))
+            {
+                using (var dst = new FileStream(filepath, FileMode.Create, FileAccess.Write, FileShare.Read))
+                {
+                    using (var src = response.GetResponseStream())
+                    {
+                        src.CopyTo(dst);
+                    }
                 }
             }
         }
@@ -150,6 +298,40 @@ namespace FMPhotoFinish
         }
 
         #endregion
+
+        class OdFileInfo
+        {
+            public OdFileInfo()
+            {
+            }
+
+            public OdFileInfo(XPathNavigator fileNode)
+            {
+                Url = string.Concat(c_oneDriveItemPrefix, fileNode.XPVal("id"), c_oneDriveContentSuffix);
+                OriginalFilename = fileNode.XPVal("name");
+                DateTime dt;
+                if (TryParseDt(fileNode.XPVal("fileSystemInfo/createdDateTime"), out dt))
+                {
+                    OriginalDateCreated = dt;
+                }
+                if (TryParseDt(fileNode.XPVal("fileSystemInfo/lastModifiedDateTime"), out dt))
+                {
+                    OriginalDateModified = dt;
+                }
+                BookmarkDate = GetBookmarkDate(fileNode);
+                if (!long.TryParse(fileNode.XPVal("size"), out Size))
+                {
+                    Size = 0L;
+                }
+            }
+
+            public string Url;
+            public string OriginalFilename;
+            public DateTime? OriginalDateCreated;
+            public DateTime? OriginalDateModified;
+            public DateTime? BookmarkDate;
+            public long Size;
+        }
     }
 
     static class XmlHelp

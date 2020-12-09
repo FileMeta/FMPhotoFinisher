@@ -137,13 +137,12 @@ namespace FMPhotoFinish
             using (var propstore = PropertyStore.Open(filepath, false))
             {
                 var date = (DateTime?)propstore.GetValue(PropertyKeys.DateTaken);
-                if (!date.HasValue) return date;
-                {
-                    date = (DateTime?)propstore.GetValue(PropertyKeys.DateEncoded);
-                }
-                if (!date.HasValue) return null;
-
-                return date.Value.ToLocalTime();
+                if (date.HasValue) return date.Value.ToLocalTime();
+                date = (DateTime?)propstore.GetValue(PropertyKeys.DateEncoded);
+                if (date.HasValue) return date.Value.ToLocalTime();
+                date = (DateTime?)propstore.GetValue(PropertyKeys.DateCreated);
+                if (date.HasValue) return date.Value.ToLocalTime();
+                return null;
             }
         }
 
@@ -192,11 +191,17 @@ namespace FMPhotoFinish
         /// </remarks>
         public static bool TryParseDateTimeFromFilename(string filename, out DateTime result)
         {
-            filename = Path.GetFileNameWithoutExtension(filename);
             result = DateTime.MinValue;
+            if (filename == null) return false;
+
+            filename = Path.GetFileNameWithoutExtension(filename);
             var sb = new StringBuilder();
-            foreach (char c in filename)
+            int i = 0;
+            while (i < filename.Length && !char.IsDigit(filename[i])) ++i;
+            while (i < filename.Length)
             {
+                char c = filename[i];
+                ++i;
                 if (char.IsDigit(c)) sb.Append(c);
                 else if (c != '-' && c != '.' && c != '_' && c != 'T') break;
                 if (sb.Length >= 14) break;

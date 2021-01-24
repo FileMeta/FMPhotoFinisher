@@ -1045,9 +1045,16 @@ namespace FMPhotoFinish
             return false;
         }
 
+        public void ScaleAndRotateToVertical(int width, int height)
+        {
+            ImageFile.ResizeAndRightImage(m_filepath, width, height);
+            Orientation = 1;
+        }
+
         public void RotateToVertical()
         {
-            JpegRotator.RotateToVertical(m_filepath);
+            if (Orientation == 1) return;
+            ImageFile.RightImage(m_filepath);
             Orientation = 1; // Normal
         }
 

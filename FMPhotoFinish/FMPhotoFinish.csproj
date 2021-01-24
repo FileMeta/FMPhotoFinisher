@@ -55,10 +55,10 @@
     <Compile Include="ExifToolWrapper.cs" />
     <Compile Include="FileMover.cs" />
     <Compile Include="FileSource.cs" />
+    <Compile Include="ImageFile.cs" />
     <Compile Include="IMediaSource.cs" />
     <Compile Include="IsomCoreMetadata.cs" />
     <Compile Include="JpegConverter.cs" />
-    <Compile Include="JpegRotator.cs" />
     <Compile Include="MediaFile.cs" />
     <Compile Include="MetaTag.cs" />
     <Compile Include="OAuth.cs" />

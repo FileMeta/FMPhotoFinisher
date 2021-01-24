@@ -209,8 +209,21 @@ Operations:
                    Set the timezone to the specified value keeping the
                    local time the same. (See details on timezone below.)
 
-  -changeTimezone <tz>  Change the timezone to the specified value keeping
+  -changeTimezone <tz>
+                   Change the timezone to the specified value keeping
                    the UTC time the same. (See details on timezone below.)
+
+  -setWidth <pixels>
+                   Scale the image so that the width is the specified number
+                   of pixels. If -setHeight is not specified (recommended)
+                   then the height will be set proportionally to preserve the
+                   aspect ratio.
+
+  -setHeight <pixels>
+                   Scale the image so that the height to the specified number
+                   of pixels. If -setWidth is not specified (recommended) then
+                   the width will be set proportionally to preserve the aspect
+                   ratio.
 
   -updateFsCreate  Update the file system dateCreated to match the metadata
                    Date Created / Date Taken value.
@@ -521,13 +534,13 @@ Metadata Bearing Filename Pattern
 
                         case "-s":
                             if (s_mediaSource != null) throw new Exception("CommandLine -s: Can only specify one source.");
-                            s_mediaSource = new FileSource(NextArgument(args, ref i, "-s"), false);
+                            s_mediaSource = new FileSource(NextArgument(args, ref i), false);
                             s_operation = Operation.ProcessMediaFiles;
                             break;
 
                         case "-st":
                             if (s_mediaSource != null) throw new Exception("CommandLine -st: Can only specify one source.");
-                            s_mediaSource = new FileSource(NextArgument(args, ref i, "-st"), true);
+                            s_mediaSource = new FileSource(NextArgument(args, ref i), true);
                             s_operation = Operation.ProcessMediaFiles;
                             break;
 
@@ -539,7 +552,7 @@ Metadata Bearing Filename Pattern
 
                         case "-sname":
                             if (s_mediaSource != null) throw new Exception("CommandLine -sname: Can only specify one source.");
-                            s_mediaSource = NamedSource.GetNamedSource(NextArgument(args, ref i, "-sname"));
+                            s_mediaSource = NamedSource.GetNamedSource(NextArgument(args, ref i));
                             s_operation = Operation.ProcessMediaFiles;
                             break;
 
@@ -554,7 +567,7 @@ Metadata Bearing Filename Pattern
 #endif
 
                         case "-selectafter":
-                            s_sourceConfiguration.SelectAfter = NextArgumentAsDate(args, ref i, "-selectAfter")
+                            s_sourceConfiguration.SelectAfter = NextArgumentAsDate(args, ref i)
                                 .ResolveTimeZone(TimeZoneInfo.Local).Date;
                             break;
 
@@ -564,7 +577,7 @@ Metadata Bearing Filename Pattern
 
                         case "-d":
                             {
-                                string dst = NextArgument(args, ref i, "-d");
+                                string dst = NextArgument(args, ref i);
                                 if (!Directory.Exists(dst))
                                 {
                                     throw new ArgumentException($"Destination folder '{dst}' does not exist.");
@@ -579,7 +592,7 @@ Metadata Bearing Filename Pattern
                             break;
 
                         case "-sortby":
-                            switch (NextArgument(args, ref i, "-sortby").ToLowerInvariant())
+                            switch (NextArgument(args, ref i).ToLowerInvariant())
                             {
                                 case "y":
                                     s_photoFinisher.SortBy = DatePathType.Y;
@@ -642,7 +655,7 @@ Metadata Bearing Filename Pattern
                             break;
 
                         case "-tag":
-                            s_photoFinisher.AddKeywords.Add(NextArgument(args, ref i, "-tag"));
+                            s_photoFinisher.AddKeywords.Add(NextArgument(args, ref i));
                             break;
 
                         case "-determinedate":
@@ -664,19 +677,13 @@ Metadata Bearing Filename Pattern
                             break;
 
                         case "-setdate":
-                            s_photoFinisher.SetDateTo = NextArgumentAsDate(args, ref i, "-setdate")
+                            s_photoFinisher.SetDateTo = NextArgumentAsDate(args, ref i)
                                 .ResolveTimeZone(TimeZoneInfo.Local);
                             break;
 
                         case "-shiftdate":
                             {
-                                ++i;
-                                if (i >= args.Length)
-                                {
-                                    throw new ArgumentException($"Expected value for -shiftDate command-line argument.");
-                                }
-
-                                string timeShift = NextArgument(args, ref i, "-shiftdate");
+                                string timeShift = NextArgument(args, ref i);
 
                                 // If the next argument starts with a sign, then the shift amount is a simple timespan.
                                 if (timeShift[0] == '+' || timeShift[0] == '-')
@@ -694,7 +701,8 @@ Metadata Bearing Filename Pattern
                                 // Else, shift amount is the difference of two times
                                 else
                                 {
-                                    string secondDate = NextArgument(args, ref i, "-shiftdate second value");
+                                    if (i + 1 >= args.Length) throw new ArgumentException("-shiftDate requires two dates or one offset.");
+                                    string secondDate = NextArgument(args, ref i);
 
                                     FileMeta.DateTag dtTarget;
                                     if (!FileMeta.DateTag.TryParse(timeShift, out dtTarget))
@@ -720,7 +728,7 @@ Metadata Bearing Filename Pattern
 
                         case "-settimezone":
                             {
-                                string tz = NextArgument(args, ref i, "-settimezone");
+                                string tz = NextArgument(args, ref i);
                                 var tzi = TimeZoneParser.ParseTimeZoneId(tz);
                                 if (tzi == null)
                                 {
@@ -732,7 +740,7 @@ Metadata Bearing Filename Pattern
 
                         case "-changetimezone":
                             {
-                                string tz = NextArgument(args, ref i, "-settimezone");
+                                string tz = NextArgument(args, ref i);
                                 var tzi = TimeZoneParser.ParseTimeZoneId(tz);
                                 if (tzi == null)
                                 {
@@ -750,6 +758,14 @@ Metadata Bearing Filename Pattern
                             s_photoFinisher.UpdateFileSystemDateModified = true;
                             break;
 
+                        case "-setwidth":
+                            s_photoFinisher.SetWidth = NextArgumentAsInt(args, ref i);
+                            break;
+
+                        case "-setheight":
+                            s_photoFinisher.SetHeight = NextArgumentAsInt(args, ref i);
+                            break;
+
                         case "-log":
                             s_log = true;
                             break;
@@ -760,14 +776,14 @@ Metadata Bearing Filename Pattern
                             break;
 
                         case "-authonedrive":
-                            s_sourceName = NextArgument(args, ref i, "-authOneDrive");
+                            s_sourceName = NextArgument(args, ref i);
                             s_operation = Operation.AuthOneDrive;
                             break;
 
 #if DEBUG
                         case "-testmetadatafromfilename":
                             s_testAction = MediaFile.TestMetadataFromFilename;
-                            s_testArgument = NextArgument(args, ref i, "-testmetadatafromfilename");
+                            s_testArgument = NextArgument(args, ref i);
                             s_operation = Operation.TestAction;
                             break;
 #endif
@@ -791,27 +807,37 @@ Metadata Bearing Filename Pattern
 
         } // ParseCommandLine
 
-        static string NextArgument(string[] args, ref int i, string argName)
+        static string NextArgument(string[] args, ref int i)
         {
             ++i;
             if (i >= args.Length)
             {
-                throw new ArgumentException($"Expected value for {argName} command-line argument.");
+                throw new ArgumentException($"Expected value for {args[i-1]} command-line argument.");
             }
             return args[i];
         }
 
-        static FileMeta.DateTag NextArgumentAsDate(string[] args, ref int i, string argName)
+        static FileMeta.DateTag NextArgumentAsDate(string[] args, ref int i)
         {
-            var date = NextArgument(args, ref i, argName);
+            var date = NextArgument(args, ref i);
             FileMeta.DateTag dt;
             if (!FileMeta.DateTag.TryParse(date, out dt))
             {
-                throw new ArgumentException($"Invalid value for {argName} '{args[i]}'.");
+                throw new ArgumentException($"Invalid value for {args[i-1]}: '{args[i]}'.");
             }
             return dt;
         }
 
+        static int NextArgumentAsInt(string[] args, ref int i)
+        {
+            var value = NextArgument(args, ref i);
+            int ival;
+            if (!int.TryParse(value, out ival))
+            {
+                throw new ArgumentException($"Invalid value for {args[i - 1]}: '{args[i]}'.");
+            }
+            return ival;
+        }
 
         static void ReportProgress(object obj, ProgressEventArgs eventArgs)
         {

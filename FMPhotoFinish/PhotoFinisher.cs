@@ -15,6 +15,7 @@ namespace FMPhotoFinish
         SetIfEmpty = 1, // Set if the value is empty
         SetAlways = 2   // Overwrite any existing value
     }
+
     class PhotoFinisher : IMediaQueue
     {
         public PhotoFinisher()
@@ -161,6 +162,16 @@ namespace FMPhotoFinish
         public IList<string> AddKeywords { get; private set; }
 
         /// <summary>
+        /// Scale the width to the specified value if non-zero
+        /// </summary>
+        public int SetWidth { get; set; }
+
+        /// <summary>
+        /// Scale the height to the specified value if non-zero
+        /// </summary>
+        public int SetHeight { get; set; }
+
+        /// <summary>
         /// The destination directory - files will be copied or moved there.
         /// </summary>
         public string DestinationDirectory { get; set; }
@@ -268,7 +279,12 @@ namespace FMPhotoFinish
                         }
                     }
 
-                    if (AutoRotate && mdf.Orientation != 1)
+                    if (SetWidth != 0 || SetHeight != 0)
+                    {
+                        ReportProgress($"   Scale {((mdf.Orientation != 1) ? "and Autorotate" : string.Empty)}");
+                        mdf.ScaleAndRotateToVertical(SetWidth, SetHeight);
+                    }
+                    else if (AutoRotate && mdf.Orientation != 1)
                     {
                         ReportProgress("   Autorotate");
                         mdf.RotateToVertical();

@@ -1684,6 +1684,7 @@ namespace FMPhotoFinish
         /// <returns>The updated string.</returns>
         static string Filenameify(string value)
         {
+            if (value == null) return string.Empty;
             var removeChars = Path.GetInvalidFileNameChars();
 
             var bldr = new StringBuilder(value.Length);

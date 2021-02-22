@@ -16,7 +16,7 @@ namespace FMPhotoFinish
     class OneDriveSource : IMediaSource
     {
         const string c_targetPrefix = "FMPhotoFinish:";
-        const string c_oneDriveBookmarkPrefix = "OneDrive/";
+        const string c_oneDriveBookmarkPrefix = "OneDrive:";
         const string c_oneDriveCameraRollUrl = @"https://graph.microsoft.com/v1.0/me/drive/special/cameraroll/children";
         const string c_oneDriveItemPrefix = @"https://graph.microsoft.com/v1.0/me/drive/items/";    // Should be followed by the item ID
         const string c_oneDriveContentSuffix = @"/content";

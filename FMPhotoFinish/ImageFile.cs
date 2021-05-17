@@ -27,21 +27,16 @@ namespace FMPhotoFinish
         /// </remarks>
         public static void ResizeAndRightImage(String filename, int width, int height)
         {
-            using (var stream = new FileStream(filename, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            if (width == 0 && height == 0)
             {
-                ResizeAndRightImage(stream, stream, width, height);
+                RightImage(filename);
             }
-        }
-
-        /// <summary>
-        /// Replace the file with a righted (turned vertical) version
-        /// </summary>
-        /// <param name="filename">The filename to update</param>
-        public static void RightImage(String filename)
-        {
-            using (var stream = new FileStream(filename, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            else
             {
-                RightImage(stream, stream);
+                using (var stream = new FileStream(filename, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                {
+                    ResizeAndRightImage(stream, stream, width, height);
+                }
             }
         }
 
@@ -67,11 +62,7 @@ namespace FMPhotoFinish
             // Load the image to change
             using (var image = Image.FromStream(src))
             {
-                if (width == 0 && height == 0)
-                {
-                    RightImage(src, dst);
-                    return;
-                }
+                if (width == 0 && height == 0) throw new ArgumentException("Resize requires dimensions.");
 
                 // targetWidth and targetHeight are the resized width and height
                 // before any rotation.
@@ -164,10 +155,17 @@ namespace FMPhotoFinish
             }
         }
 
-        public static void RightImage(Stream src, Stream dst)
+        /// <summary>
+        /// Replace the file with a righted (turned vertical) version
+        /// </summary>
+        /// <param name="filename">The filename to update</param>
+        public static void RightImage(String filename)
         {
+            // Write the image to a temporary file in the same folder as the existing file
+            string filenameTemp = filename + ".temp";
+
             // Load the image to rotate
-            using (var image = Image.FromStream(src))
+            using (var image = Image.FromFile(filename))
             {
                 // Get the existing orientation
                 var piOrientation = image.GetPropertyItem(c_propId_Orientation);
@@ -179,6 +177,9 @@ namespace FMPhotoFinish
                 EncoderValue ev;
                 switch (piOrientation.Value[0])
                 {
+                    case 1: // Normal
+                        return; // No rotation necessary, do nothing
+
                     case 2: // FlipHorizontal
                         ev = EncoderValue.TransformFlipHorizontal;
                         break;
@@ -199,23 +200,29 @@ namespace FMPhotoFinish
                         ev = EncoderValue.TransformRotate270;
                         break;
 
-                    case 1: // Normal
                     default:
-                        src.CopyTo(dst);
-                        return;
+                        return; // It's in an orientation we don't know how to deal with such as transverse or transpose
                 }
 
                 // Change the orientation to 1 (normal) as we will rotate during the export
                 piOrientation.Value[0] = 1;
                 image.SetPropertyItem(piOrientation);
 
-                // Prep the encoder parameters
+                // Prep the encoder and its parameters
+                var encoder = System.Drawing.Imaging.Encoder.Transformation;
+                var encParam = new EncoderParameter(encoder, (long)ev);
                 var encParams = new EncoderParameters(1);
-                encParams.Param[0] = new EncoderParameter(Encoder.Transformation, (long)ev);
+                encParams.Param[0] = encParam;
 
                 // Write the image with a rotation transformation
-                image.Save(dst, JpegCodecInfo, encParams);
+                image.Save(filenameTemp, JpegCodecInfo, encParams);
             }
+
+            // Delete the original file
+            File.Delete(filename);
+
+            // Rename the new one to the old name
+            File.Move(filenameTemp, filename);
         }
 
         static ImageCodecInfo s_jpegCodecInfo;

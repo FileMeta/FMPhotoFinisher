@@ -20,6 +20,7 @@ namespace FMPhotoFinish
         const string c_oneDriveCameraRollUrl = @"https://graph.microsoft.com/v1.0/me/drive/special/cameraroll/children";
         const string c_oneDriveItemPrefix = @"https://graph.microsoft.com/v1.0/me/drive/items/";    // Should be followed by the item ID
         const string c_oneDriveContentSuffix = @"/content";
+        const int c_maxBatch = 150;
 
         string m_sourceName;
         string m_refreshToken;
@@ -85,7 +86,23 @@ namespace FMPhotoFinish
             mediaQueue.ReportStatus(null);
             mediaQueue.ReportProgress($"Selected {queue.Count} Skipped {count - queue.Count}");
 
+            if (queue.Count > c_maxBatch)
+            {
+                // Sort so that we'll keep the oldest ones.
+                queue.Sort((a, b) => DateCompare(a.BookmarkDate, b.BookmarkDate));
+                queue.RemoveRange(c_maxBatch, queue.Count - c_maxBatch);
+                mediaQueue.ReportProgress($"Batch limited to {queue.Count}");
+            }
+
             return queue;
+        }
+
+        static int DateCompare(DateTime? a, DateTime? b)
+        {
+            if (!a.HasValue && !b.HasValue) return 0;
+            if (!a.HasValue) return 1;
+            if (!b.HasValue) return -1;
+            return a.Value.CompareTo(b.Value);
         }
 
         void DownloadMediaFiles(List<OdFileInfo> queue, SourceConfiguration sourceConfig, IMediaQueue mediaQueue)

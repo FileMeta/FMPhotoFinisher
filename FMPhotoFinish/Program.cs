@@ -893,8 +893,12 @@ Metadata Bearing Filename Pattern
             }
 
             // Do the work.
-            s_mediaSource.RetrieveMediaFiles(s_sourceConfiguration, s_photoFinisher);
-            s_photoFinisher.PerformOperations();
+            do
+            {
+                s_photoFinisher.Reset();
+                s_mediaSource.RetrieveMediaFiles(s_sourceConfiguration, s_photoFinisher);
+                s_photoFinisher.PerformOperations();
+            } while (s_photoFinisher.RequestAnotherBatch);
         }
 
     } // Class Program

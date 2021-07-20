@@ -62,6 +62,12 @@ namespace FMPhotoFinish
             m_fileQueue.Add(pfi);
         }
 
+        /// <summary>
+        /// Used by an <see cref="IMediaSource"/> to indicate that another batch
+        /// should be processed after the current one.
+        /// </summary>
+        public bool RequestAnotherBatch { get; set; }
+
         #region Operations
 
         /// <summary>
@@ -177,6 +183,13 @@ namespace FMPhotoFinish
         public string DestinationDirectory { get; set; }
 
         #endregion Operations
+
+        public void Reset()
+        {
+            RequestAnotherBatch = false;
+            m_fileQueue.Clear();
+            // Duplicate hash is not cleared - deduplicate spans batches.
+        }
 
         public void PerformOperations()
         {

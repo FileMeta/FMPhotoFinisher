@@ -31,6 +31,16 @@ namespace FMPhotoFinish
         /// <remarks>During processing, the location of the file may change. In which case
         /// the <see cref="ProcessFileInfo.Filepath"/> property will be updated.</remarks>
         void Add(ProcessFileInfo pfi);
+
+        /// <summary>
+        /// Indicate to the media processor that this is a limited batch.
+        /// </summary>
+        /// <remarks>
+        /// Some sources work better with limited batch sizes. Setting this value to true
+        /// indicates that the source has more media files beyond the batch that it just
+        /// processed and that the system should call again once this batch is complete.
+        /// </remarks>
+        bool RequestAnotherBatch { get; set; }
     }
 
     interface IMediaSource

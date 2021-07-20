@@ -62,7 +62,12 @@ namespace FMPhotoFinish
             // Retrieve file info and enqueue
             var queue = new List<OdFileInfo>();
             int count = 0;
-            string nextUrl = c_oneDriveCameraRollUrl;
+
+            // This is a Kludge. Need a way to either detect the correct folder or to
+            // configure it when setting up a new named source. And, with the named
+            // source, we need to clean up the circumstance when credentials expire.
+            string nextUrl = m_sourceName.Equals("BrandtOneDrive")
+                ? c_oneDriveSamsungCameraUrl : c_oneDriveCameraRollUrl;
             do
             {
                 var fileList = FetchJson(nextUrl);

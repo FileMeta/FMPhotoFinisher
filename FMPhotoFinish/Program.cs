@@ -94,6 +94,10 @@ Source:
                    cameras. This is the best option for retrieving from
                    digital cameras or memory cards from cameras.
 
+  -sName           Select files from a named source. Presently, the only
+                   type of named source is OneDrive. Create a OneDrive named
+                   source using the -authOneDrive command.
+
   -selectAfter <dateTime> Only select files from the source with a DateTaken
                    (for photos) or equivalent (for video and audio) after
                    the specified date/time. If the file does not have date

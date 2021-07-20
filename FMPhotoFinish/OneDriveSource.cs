@@ -91,6 +91,7 @@ namespace FMPhotoFinish
                 // Sort so that we'll keep the oldest ones.
                 queue.Sort((a, b) => DateCompare(a.BookmarkDate, b.BookmarkDate));
                 queue.RemoveRange(c_maxBatch, queue.Count - c_maxBatch);
+                mediaQueue.RequestAnotherBatch = true;
                 mediaQueue.ReportProgress($"Batch limited to {queue.Count}");
             }
 

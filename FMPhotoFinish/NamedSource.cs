@@ -37,6 +37,17 @@ namespace FMPhotoFinish
             }
         }
 
+        public static string[] GetSourceNames()
+        {
+            var sources = CredentialManager.Enumerate($"{c_targetPrefix}*");
+            for (int i=0; i<sources.Length; ++i)
+            {
+                if (sources[i].StartsWith(c_targetPrefix))
+                    sources[i] = sources[i].Substring(c_targetPrefix.Length);
+            }
+            return sources;
+        }
+
         public static IMediaSource GetNamedSource(string sourceName)
         {
             string username;

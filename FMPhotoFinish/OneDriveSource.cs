@@ -18,6 +18,7 @@ namespace FMPhotoFinish
         const string c_targetPrefix = "FMPhotoFinish:";
         const string c_oneDriveBookmarkPrefix = "OneDrive:";
         const string c_oneDriveCameraRollUrl = @"https://graph.microsoft.com/v1.0/me/drive/special/cameraroll/children";
+        const string c_oneDriveSamsungCameraUrl = @"https://graph.microsoft.com/v1.0/me/drive/root:/Pictures/Samsung%20Gallery/DCIM/Camera:/children";
         const string c_oneDriveItemPrefix = @"https://graph.microsoft.com/v1.0/me/drive/items/";    // Should be followed by the item ID
         const string c_oneDriveContentSuffix = @"/content";
         const int c_maxBatch = 150;

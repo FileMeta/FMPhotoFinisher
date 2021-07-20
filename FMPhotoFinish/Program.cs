@@ -461,6 +461,10 @@ Metadata Bearing Filename Pattern
                         break;
 
                     case Operation.ListNamedSources:
+                        foreach(var name in NamedSource.GetSourceNames())
+                        {
+                            Console.WriteLine(name);
+                        }
                         break;
 
                     case Operation.DeleteNamedSource:
@@ -773,6 +777,10 @@ Metadata Bearing Filename Pattern
                         case "-listtimezones":
                         case "-listtimezone":
                             s_operation = Operation.ListTimeZones;
+                            break;
+
+                        case "-listnamedsources":
+                            s_operation = Operation.ListNamedSources;
                             break;
 
                         case "-authonedrive":

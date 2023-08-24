@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using System.Linq;
 using FileMeta;
 using Interop;
+using System.Runtime.InteropServices;
 
 namespace FMPhotoFinish
 {
@@ -1304,9 +1305,35 @@ namespace FMPhotoFinish
                 }
             }
 
+            if (!CommitPropertyStoreMetadata(m_filepath, timezone, !creationDateStoredByIsom))
+            {
+                if (m_mediaType != MediaType.Image)
+                {
+                    // This probably won't happen as the problem seems to be isolated to JPEG images
+                    throw new ApplicationException("Failed to set metadata due to insufficient metadata s pace in the file.");
+                }
+
+                ImageFile.RemoveThumbnail(m_filepath);
+
+                if (!CommitPropertyStoreMetadata(m_filepath, timezone, !creationDateStoredByIsom))
+                {
+                    throw new ApplicationException("Insufficient space for metadata in the image.");
+                }
+            }
+
+            m_updateMetadata = false;
+            return true;
+        }
+
+        /// <summary>
+        /// Internal function to commit PropertyStore metadata
+        /// </summary>
+        /// <returns>True if the commit succeeded. False if it failed due to "insufficient space".</returns>
+        private bool CommitPropertyStoreMetadata(string filePath, TimeZoneTag timezone, bool storeCreationDate)
+        {
             try
             {
-                using (var ps = PropertyStore.Open(m_filepath, true))
+                using (var ps = PropertyStore.Open(filePath, true))
                 {
                     // Prep the metatags with existing values
                     var metaTagSet = new MetaTagSet();
@@ -1315,7 +1342,7 @@ namespace FMPhotoFinish
                     if (m_mediaType == MediaType.Image)
                     {
 
-                        if (m_creationDate.HasValue && !creationDateStoredByIsom)
+                        if (m_creationDate.HasValue && storeCreationDate)
                         {
                             // Convert to local (this does nothing if it is already Local.
                             var dt = timezone.ToLocal(m_creationDate.Value);
@@ -1326,7 +1353,7 @@ namespace FMPhotoFinish
                     // Audio and video both use Isom file format (.mp4 and .m4a)
                     else
                     {
-                        if (m_creationDate.HasValue && !creationDateStoredByIsom)
+                        if (m_creationDate.HasValue && storeCreationDate)
                         {
                             // Convert to UTC (this does nothing if it is already UTC.
                             var dt = m_timezone.ToUtc(m_creationDate.Value);
@@ -1362,13 +1389,20 @@ namespace FMPhotoFinish
                     ps.Commit();
                 }
             }
+            catch (COMException err)
+            {
+                if (err.HResult == unchecked((int)0x88982F52u)) // Too much data to be written to the bitmap
+                {
+                    return false;
+                }
+                throw new ApplicationException($"Error storing metadata: {err.Message}", err);
+            }
             catch (Exception err)
             {
                 // Translate error message
-                throw new ApplicationException("Error storing metadata - file may be corrupt.", err);
+                throw new ApplicationException($"Error storing metadata: {err.Message}", err);
             }
 
-            m_updateMetadata = false;
             return true;
         }
 

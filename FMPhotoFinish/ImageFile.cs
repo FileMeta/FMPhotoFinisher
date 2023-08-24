@@ -10,6 +10,7 @@ namespace FMPhotoFinish
     static class ImageFile
     {
         const Int32 c_propId_Orientation = 0x0112;
+        const Int32 c_propId_Thumbnail = 0x501B;
         const EncoderValue c_encoderValueZero = (EncoderValue)0; // Actually the same as ColorTypeCMYK but that value is not used.
 
         /// <summary>
@@ -216,6 +217,32 @@ namespace FMPhotoFinish
 
                 // Write the image with a rotation transformation
                 image.Save(filenameTemp, JpegCodecInfo, encParams);
+            }
+
+            // Delete the original file
+            File.Delete(filename);
+
+            // Rename the new one to the old name
+            File.Move(filenameTemp, filename);
+        }
+
+        /// <summary>
+        /// Remove the thumbnail from a .jpg file to make room for metadata
+        /// </summary>
+        /// <param name="filename">The filename to rewrite</param>
+        /// <remarks>This is used to make more metadata space when the Windows property store
+        /// failes to write metadata.
+        /// </remarks>
+        public static void RemoveThumbnail(String filename)
+        {
+            // Write the image to a temporary file in the same folder as the existing file
+            string filenameTemp = filename + ".temp";
+
+            // Load the image to change
+            using (var image = Image.FromFile(filename))
+            {
+                image.RemovePropertyItem(c_propId_Thumbnail);
+                image.Save(filenameTemp, ImageFormat.Jpeg);
             }
 
             // Delete the original file

@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using System.Runtime.CompilerServices;
 
 namespace FMPhotoFinish
 {
@@ -89,6 +90,16 @@ namespace FMPhotoFinish
         /// Auto-rotate images to the vertical position.
         /// </summary>
         public bool AutoRotate { get; set; }
+
+        /// <summary>
+        /// Remove any embedded thumbnail in an image file
+        /// </summary>
+        /// <remarks>The thumbnail takes up metadata space and can cause
+        /// metadata updates to fail. Also, very few applications actually
+        /// use the embedded thumbnail. Rather, they generate and cache
+        /// their own thumbnails.
+        /// </remarks>
+        public bool RemoveThumbnail { get; set; }
 
         /// <summary>
         /// Remove duplicates or, when copying, do not copy duplicates.
@@ -302,6 +313,13 @@ namespace FMPhotoFinish
                         ReportProgress("   Autorotate");
                         mdf.RotateToVertical();
                     }
+                    else if (RemoveThumbnail && mdf.MediaType == MediaType.Image)
+                    {
+                        if (mdf.RemoveThumbnail())
+                        {
+                            ReportProgress("   Remove Thumbnail");
+                        }
+                    }
 
                     if (SetDateTo != null)
                     {
@@ -373,7 +391,7 @@ namespace FMPhotoFinish
                         }
                     }
 
-                    if (mdf.CommitMetadata())
+                    if (mdf.CommitMetadata(ReportProgress))
                     {
                         ReportProgress("   Metadata updated.");
                     }

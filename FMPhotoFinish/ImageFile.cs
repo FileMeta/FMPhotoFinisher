@@ -4,6 +4,7 @@ using System.Drawing.Imaging;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 
 namespace FMPhotoFinish
 {
@@ -134,6 +135,10 @@ namespace FMPhotoFinish
                         {
                             prop.Value[0] = 1;  // Set it back to vertical.
                         }
+                        else if (prop.Id == c_propId_Thumbnail)
+                        {
+                            continue; // Don't copy thumbnail. It is no longer valid.
+                        }
                         resizedImage.SetPropertyItem(prop);
                     }
 
@@ -209,6 +214,12 @@ namespace FMPhotoFinish
                 piOrientation.Value[0] = 1;
                 image.SetPropertyItem(piOrientation);
 
+                // Remove any thumbnail (it will no longer match)
+                if (HasThumbnail(image))
+                {
+                    image.RemovePropertyItem(c_propId_Thumbnail);
+                }
+
                 // Prep the encoder and its parameters
                 var encoder = System.Drawing.Imaging.Encoder.Transformation;
                 var encParam = new EncoderParameter(encoder, (long)ev);
@@ -233,7 +244,7 @@ namespace FMPhotoFinish
         /// <remarks>This is used to make more metadata space when the Windows property store
         /// failes to write metadata.
         /// </remarks>
-        public static void RemoveThumbnail(String filename)
+        public static bool RemoveThumbnail(String filename)
         {
             // Write the image to a temporary file in the same folder as the existing file
             string filenameTemp = filename + ".temp";
@@ -241,6 +252,7 @@ namespace FMPhotoFinish
             // Load the image to change
             using (var image = Image.FromFile(filename))
             {
+                if (!HasThumbnail(image)) return false;
                 image.RemovePropertyItem(c_propId_Thumbnail);
                 image.Save(filenameTemp, ImageFormat.Jpeg);
             }
@@ -250,6 +262,20 @@ namespace FMPhotoFinish
 
             // Rename the new one to the old name
             File.Move(filenameTemp, filename);
+
+            return true;
+        }
+
+        static bool HasThumbnail(Image image)
+        {
+            foreach (var prop in image.PropertyItems)
+            {
+                if (prop.Id == c_propId_Thumbnail)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         static ImageCodecInfo s_jpegCodecInfo;

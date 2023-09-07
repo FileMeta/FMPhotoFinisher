@@ -240,6 +240,16 @@ Operations:
   -tag <tag>       Add a keyword tag to each file. This parameter may be
                    repeated to add multiple tags.
 
+  -removeThumbnail Removes any embedded thumbnail image. A thumbnail uses
+                   metadata space and can cause metadata updates to fail. If
+                   a metadata update fails and -removeThumbnail is not set
+                   an implicit -removeThumbnail will be performed to ensure
+                   that metadata is preserved. Likewise, autorotate, setWidth,
+                   and SetHeight will remove a thumbnail because it no longer
+                   matches the primary image. The embedded thumbnail is used
+                   by very few programs. Most generate their own thumbnail and
+                   cache it.
+
   -deduplicate     Remove duplicate media files. When copying, (using the
                    -d argument) duplicates are simply not copied.
                    If in-place or moving (using the -move argument)
@@ -772,6 +782,10 @@ Metadata Bearing Filename Pattern
 
                         case "-setheight":
                             s_photoFinisher.SetHeight = NextArgumentAsInt(args, ref i);
+                            break;
+
+                        case "-removethumbnail":
+                            s_photoFinisher.RemoveThumbnail = true;
                             break;
 
                         case "-log":

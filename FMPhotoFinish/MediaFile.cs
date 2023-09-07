@@ -1059,6 +1059,19 @@ namespace FMPhotoFinish
             Orientation = 1; // Normal
         }
 
+        /// <summary>
+        /// Remove any embedded thumbnail from an image file (typically JPEG)
+        /// </summary>
+        /// <remarks>The thumbnail takes up a lot of space allocated to metadata. Removing the
+        /// thumbnail ensures that metadata can be saved. Besides, very few programs actually
+        /// use the embedded thumbnail. They typically generate and cache their own thumbnail.
+        /// </remarks>
+        public bool RemoveThumbnail()
+        {
+            if (m_mediaType != MediaType.Image) return false;
+            return ImageFile.RemoveThumbnail(m_filepath);
+        }
+
         public string PreferredFormat { get { return s_preferredExtensions[(int)m_mediaType]; } }
 
         public bool IsPreferredFormat { get { return string.Equals(Path.GetExtension(m_filepath), PreferredFormat, StringComparison.OrdinalIgnoreCase); } }
@@ -1267,7 +1280,7 @@ namespace FMPhotoFinish
         /// Save any metadata fields that have changed.
         /// </summary>
         /// <returns>True if metadata updated. False if no metadata changes to save.</returns>
-        public bool CommitMetadata()
+        public bool CommitMetadata(ProgressReporter reporter = null)
         {
             if (!m_updateMetadata) return false; // Nothing to update
 
@@ -1313,7 +1326,10 @@ namespace FMPhotoFinish
                     throw new ApplicationException("Failed to set metadata due to insufficient metadata s pace in the file.");
                 }
 
-                ImageFile.RemoveThumbnail(m_filepath);
+                if (ImageFile.RemoveThumbnail(m_filepath) && reporter != null)
+                {
+                    reporter("   Remove thumbnail to free metadata space.");
+                }
 
                 if (!CommitPropertyStoreMetadata(m_filepath, timezone, !creationDateStoredByIsom))
                 {
